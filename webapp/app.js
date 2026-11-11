@@ -10,6 +10,8 @@ const state = {
   view: "dashboard",    // "dashboard" | "sheet" | "summary" | "holiday"
   searchText: "",
   statusFilter: "",   // 진행현황 필터 ("" = 전체)
+  myOnly: false,        // "내 업무만" 토글 (로그인 사용자 = 담당자인 업무만)
+  myPinned: new Set(),  // 내 업무만 상태에서 새로 추가한 행(담당자 지정 전에도 보이도록)
   sortKey: null,        // 정렬 기준 컬럼 key (null이면 시트 등록 순서)
   sortDir: null         // "asc" | "desc"
 };
@@ -461,6 +463,8 @@ function bindGlobalControls() {
   if (holidayViewBtn) holidayViewBtn.onclick = () => setView("holiday");
   document.getElementById("btnSettings").onclick = openSettings;
   document.getElementById("searchInput").oninput = (e) => { state.searchText = e.target.value; renderSheet(); };
+  const myOnlyBtn = document.getElementById("btnMyOnly");
+  if (myOnlyBtn) myOnlyBtn.onclick = toggleMyOnly;
   buildStatusFilter();
   document.getElementById("btnExport").onclick = exportExcel;
   document.getElementById("btnImport").onclick = triggerCsvImport;
@@ -514,6 +518,7 @@ function renderAll() {
 async function addRow() {
   const t = emptyTask();
   t.id = uid();
+  if (state.myOnly) state.myPinned.add(t.id);
   state.tasks.push(t);
   renumber();
   await persistTasks(state.currentMonth, state.tasks);
@@ -732,7 +737,42 @@ function applySort(rows) {
   });
 }
 
+// ---------------- "내 업무만" 토글 ----------------
+// 로그인 사용자 이름(예: 기획2)이 업무담당자(기획·디자인·퍼블·개발·GA) 중 하나와 같으면 "내 업무"로 봅니다.
+const MY_TASK_KEYS = ["planner", "designer", "publisher", "developer", "ga"];
+
+function myAssigneeName() {
+  const u = window.WorksAuth && window.WorksAuth.user ? window.WorksAuth.user() : null;
+  return u && u.name ? String(u.name).trim() : "";
+}
+
+function isMyTask(t, name) {
+  if (state.myPinned.has(t.id)) return true;
+  if (!name) return false;
+  return MY_TASK_KEYS.some(k => String(t[k] || "").trim() === name);
+}
+
+function toggleMyOnly() {
+  state.myOnly = !state.myOnly;
+  state.myPinned.clear();
+  updateMyOnlyBtn();
+  renderSheet();
+}
+
+function updateMyOnlyBtn() {
+  const btn = document.getElementById("btnMyOnly");
+  if (!btn) return;
+  const name = myAssigneeName();
+  btn.classList.toggle("is-active", state.myOnly);
+  btn.setAttribute("aria-pressed", state.myOnly ? "true" : "false");
+  btn.textContent = state.myOnly ? "✓ 내 업무만" : "내 업무만";
+  btn.title = name
+    ? `업무담당자(기획·디자인·퍼블·개발·GA)가 '${name}'인 업무만 봅니다. 다시 누르면 전체 목록`
+    : "로그인 이름이 담당자 코드(예: 기획2)와 같아야 내 업무를 찾을 수 있습니다";
+}
+
 function renderSheet() {
+  updateMyOnlyBtn();
   const theadGroup = document.getElementById("theadGroup");
   const theadCols = document.getElementById("theadCols");
   const tbody = document.getElementById("tbody");
@@ -790,7 +830,9 @@ function renderSheet() {
 
   const q = state.searchText.trim().toLowerCase();
   const sf = state.statusFilter;
+  const myName = state.myOnly ? myAssigneeName() : "";
   let rows = state.tasks.filter(t => {
+    if (state.myOnly && !isMyTask(t, myName)) return false;
     if (sf === "__blank__") { if (t.status) return false; }
     else if (sf && t.status !== sf) return false;
     if (!q) return true;

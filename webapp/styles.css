@@ -260,6 +260,7 @@ button { font-family: var(--font-text); }
   color: var(--primary);
   font-weight: 600;
 }
+.my-only-btn { white-space: nowrap; }
 
 #searchInput {
   border: 1px solid rgba(0, 0, 0, 0.08);
