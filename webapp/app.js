@@ -2,6 +2,17 @@
 // app.js — 업무관리 시트 프론트엔드 로직
 // ============================================================
 
+// 화면별 옵션: index_biz.html 처럼 window.APP_OPTIONS 를 지정한 화면에만 적용됩니다.
+// (index.html 은 APP_OPTIONS 가 없으므로 기존과 동일)
+//  - hideColumns: 업무현황 목록에서 숨길 컬럼 key 목록 (저장된 값은 그대로 유지)
+//  - weeklyNoGA: 주간보고에서 "▧ GA" 섹션과 대분류 GA 업무를 모두 제외
+//  - weeklyNoFocus: 주간보고 하단 "• 기업 중점 과제" 줄 제외
+const APP_OPTIONS = window.APP_OPTIONS || {};
+(APP_OPTIONS.hideColumns || []).forEach(key => {
+  const i = COLUMNS.findIndex(c => c.key === key);
+  if (i >= 0) COLUMNS.splice(i, 1);
+});
+
 const state = {
   months: [],          // ["8월","9월",...]
   currentMonth: null,
@@ -2245,7 +2256,8 @@ async function generateWeeklyReport() {
     const valid = tasks.filter(t => t.status !== "취소" && (t.title || "").trim());
 
     // GA는 별도 섹션으로 빼고, 나머지를 완료/진행/접수로 나눕니다.
-    const gaList = valid.filter(t => t.major === "GA");
+    // (weeklyNoGA 화면은 GA 업무를 보고서에서 아예 제외)
+    const gaList = APP_OPTIONS.weeklyNoGA ? [] : valid.filter(t => t.major === "GA");
     const rest = valid.filter(t => t.major !== "GA");
 
     // 완료: 완료일이 대상 기간 내
@@ -2287,12 +2299,16 @@ async function generateWeeklyReport() {
     pushSection(lines, `▧ 접수(검토 중) ${receivedList.length}건`,
       receivedList, t => t.receivedDate ? mdShort(t.receivedDate) : "");
 
-    pushSection(lines, `▧ GA ${gaList.length}건`,
-      gaList, t => t.dueDate ? mdShort(t.dueDate) : (t.doneDate ? mdShort(t.doneDate) : ""));
+    if (!APP_OPTIONS.weeklyNoGA) {
+      pushSection(lines, `▧ GA ${gaList.length}건`,
+        gaList, t => t.dueDate ? mdShort(t.dueDate) : (t.doneDate ? mdShort(t.doneDate) : ""));
+    }
 
-    lines.push("----------");
-    lines.push("• 기업 중점 과제");
-    lines.push("");
+    if (!APP_OPTIONS.weeklyNoFocus) {
+      lines.push("----------");
+      lines.push("• 기업 중점 과제");
+      lines.push("");
+    }
 
     if (needCheck.length) {
       lines.push("----------");

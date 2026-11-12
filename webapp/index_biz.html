@@ -147,6 +147,12 @@
 <script>
   // 별도 시스템: 서버 저장 공간·브라우저 저장 키를 index.html 과 분리합니다.
   window.APP_NS = "biz";
+  // 디지털사업 전용 옵션 (app.js에서 사용)
+  window.APP_OPTIONS = {
+    hideColumns: ["developer", "ga", "hGa"], // 업무현황 목록에서 "개발", "GA" 담당자 컬럼과 업무투입 "GA(H)" 컬럼 숨김
+    weeklyNoGA: true,                 // 주간보고 "▧ GA" 섹션과 GA 업무 제외
+    weeklyNoFocus: true               // 주간보고 "• 기업 중점 과제" 제외
+  };
 </script>
 <div id="holidayModal" class="modal">
   <div class="modal-box modal-box-wide">
@@ -175,7 +181,7 @@
 
 <script src="config.js?v=20261029b"></script>
 <script src="xlsx.js?v=20261029b"></script>
-<script src="app.js?v=20261111a"></script>
+<script src="app.js?v=20261112b"></script>
 <script src="holiday.js?v=20261029b"></script>
 <style>
   /* 영역 접기/펼치기 버튼 */
