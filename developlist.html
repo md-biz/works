@@ -59,7 +59,7 @@
 
     --font-display: "Noto Sans KR", system-ui, -apple-system, sans-serif;
     --font-text: "Noto Sans KR", system-ui, -apple-system, sans-serif;
-    --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-mono: "Noto Sans KR", system-ui, -apple-system, sans-serif;
 
     --r-xs: 5px;
     --r-sm: 8px;
@@ -70,6 +70,7 @@
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
+    font-variant-numeric: tabular-nums; /* 숫자 폭을 같게 맞춰 표·날짜 정렬 유지 */
     background: var(--canvas-parchment);
     color: var(--ink);
     font-family: var(--font-text);
