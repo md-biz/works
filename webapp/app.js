@@ -2,17 +2,6 @@
 // app.js — 업무관리 시트 프론트엔드 로직
 // ============================================================
 
-// 화면별 옵션: index_biz.html 처럼 window.APP_OPTIONS 를 지정한 화면에만 적용됩니다.
-// (index.html 은 APP_OPTIONS 가 없으므로 기존과 동일)
-//  - hideColumns: 업무현황 목록에서 숨길 컬럼 key 목록 (저장된 값은 그대로 유지)
-//  - weeklyNoGA: 주간보고에서 "▧ GA" 섹션과 대분류 GA 업무를 모두 제외
-//  - weeklyNoFocus: 주간보고 하단 "• 기업 중점 과제" 줄 제외
-const APP_OPTIONS = window.APP_OPTIONS || {};
-(APP_OPTIONS.hideColumns || []).forEach(key => {
-  const i = COLUMNS.findIndex(c => c.key === key);
-  if (i >= 0) COLUMNS.splice(i, 1);
-});
-
 const state = {
   months: [],          // ["8월","9월",...]
   currentMonth: null,
@@ -124,6 +113,8 @@ async function loadTasks(month) {
   try {
     const data = await apiFetchJson(`/api/tasks?month=${encodeURIComponent(month)}`);
     const tasks = data.tasks || [];
+    // 불러온 시점의 서버 버전과 목록을 기억 (저장 시 충돌 확인·병합 기준)
+    rememberBase(month, Number(data.version) || 0, tasks);
     // 서버 응답을 로컬 캐시에 보관 (다음 접속 시 서버 장애 대비)
     try { localStorage.setItem(localTasksKey(month), JSON.stringify(tasks)); } catch (e) {}
     return tasks;
@@ -131,12 +122,14 @@ async function loadTasks(month) {
     console.error("[불러오기 실패]", err);
     const raw = localStorage.getItem(localTasksKey(month));
     const cached = raw ? JSON.parse(raw) : [];
+    // 버전을 알 수 없음(-1) → 저장 시 서버 최신본과 비교해 "이 화면에서 바꾼 부분만" 합쳐서 저장됩니다.
+    rememberBase(month, -1, cached);
     setSaveStatus("error", "불러오기 실패 (클릭)");
     saveState.lastError = (err && err.message) || String(err);
     if (cached.length) {
       alert(
         `서버에서 '${month}' 데이터를 불러오지 못해, 이 브라우저에 저장된 사본(${cached.length}건)을 표시합니다.\n\n` +
-        `이 상태에서 수정하면 서버 연결이 복구될 때 덮어쓰기 됩니다.\n\n오류: ${saveState.lastError}`
+        `이 상태에서 수정한 부분은 서버 연결이 복구되면 서버 최신 내용에 합쳐서 저장됩니다.\n\n오류: ${saveState.lastError}`
       );
     }
     return cached;
@@ -144,7 +137,119 @@ async function loadTasks(month) {
 }
 
 // 저장 상태 표시 (헤더 우측)
-const saveState = { timer: null, inFlight: false, pending: null, lastError: null };
+const saveState = {
+  timer: null, inFlight: false, pending: null, lastError: null,
+  bases: {},          // 월별 { version, tasks } — 마지막으로 서버와 맞춘 상태 (충돌 시 병합 기준)
+  conflictRetries: 0  // 연속 충돌 횟수 (무한 반복 방지)
+};
+
+function cloneTasks(tasks) { return JSON.parse(JSON.stringify(tasks || [])); }
+
+function rememberBase(month, version, tasks) {
+  saveState.bases[month] = { version, tasks: cloneTasks(tasks) };
+}
+
+// 충돌 병합: 서버 최신본(serverTasks)에 "이 화면에서 바꾼 부분"만 얹습니다.
+// - 기존 행: 이 화면에서 값이 바뀐 칸만 반영 (같은 행의 다른 칸은 서버 값 유지)
+// - 새 행: 그대로 추가 / 이 화면에서 지운 행: 서버에서도 제외
+// - NO(no)는 순서 번호라 비교에서 빼고 마지막에 다시 매깁니다.
+function mergeLocalChanges(baseTasks, localTasks, serverTasks) {
+  const same = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+  const baseMap = new Map(baseTasks.map(t => [t.id, t]));
+  const localIds = new Set(localTasks.map(t => t.id));
+  const deleted = new Set(baseTasks.filter(t => !localIds.has(t.id)).map(t => t.id));
+
+  const fieldChanges = new Map(); // id -> { key: value }
+  const newRows = new Map();      // id -> task
+  localTasks.forEach(t => {
+    const b = baseMap.get(t.id);
+    if (!b) { newRows.set(t.id, t); return; }
+    const diff = {};
+    new Set([...Object.keys(b), ...Object.keys(t)]).forEach(k => {
+      if (k === "no") return;
+      if (!same(b[k], t[k])) diff[k] = t[k];
+    });
+    if (Object.keys(diff).length) fieldChanges.set(t.id, diff);
+  });
+
+  const merged = [];
+  const seen = new Set();
+  serverTasks.forEach(s => {
+    if (deleted.has(s.id)) return;
+    seen.add(s.id);
+    if (newRows.has(s.id)) { merged.push(cloneTasks([newRows.get(s.id)])[0]); return; }
+    const row = cloneTasks([s])[0];
+    const diff = fieldChanges.get(s.id);
+    if (diff) Object.assign(row, cloneTasks([diff])[0]);
+    merged.push(row);
+  });
+  // 이 화면에서 새로 추가한 행 + (다른 사람이 지웠지만 이 화면에서 수정한 행은 내용 보존을 위해 다시 추가)
+  localTasks.forEach(t => {
+    if (seen.has(t.id)) return;
+    if (newRows.has(t.id) || fieldChanges.has(t.id)) merged.push(cloneTasks([t])[0]);
+  });
+  merged.forEach(t => { if (typeof recomputeHours === "function") recomputeHours(t); });
+  merged.forEach((t, i) => { t.no = i + 1; });
+  return merged;
+}
+
+function isEditingSheet() {
+  const a = document.activeElement;
+  return !!(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest && a.closest("#sheetPanel"));
+}
+
+// 화면 다시 그리기 — 셀 입력 중이면 입력이 끝난 뒤(포커스가 빠질 때) 그립니다.
+let deferredRender = false;
+function rerenderAfterMerge() {
+  if (isEditingSheet()) {
+    if (deferredRender) return;
+    deferredRender = true;
+    document.addEventListener("focusout", function once() {
+      setTimeout(() => {
+        if (isEditingSheet()) return; // 다음 칸으로 이동한 경우 계속 대기
+        document.removeEventListener("focusout", once);
+        deferredRender = false;
+        renderAll();
+      }, 0);
+    });
+    return;
+  }
+  renderAll();
+}
+
+// 409(충돌) 응답 처리: 서버 최신본 + 내 변경분을 합쳐 다시 저장 대기열에 올립니다.
+function handleSaveConflict(job, body) {
+  const base = saveState.bases[job.month];
+  const baseTasks = base ? base.tasks : [];
+  // 저장 대기 중인 더 최신 변경이 있으면 그것까지 포함해서 합칩니다.
+  let local = job.tasks;
+  if (saveState.pending && saveState.pending.month === job.month) {
+    local = saveState.pending.tasks;
+    saveState.pending = null;
+  }
+  const merged = mergeLocalChanges(baseTasks, local, body.tasks || []);
+  rememberBase(job.month, Number(body.version) || 0, body.tasks || []);
+  saveState.pending = { month: job.month, tasks: cloneTasks(merged) };
+  try { localStorage.setItem(localTasksKey(job.month), JSON.stringify(merged)); } catch (e) {}
+
+  if (state.currentMonth === job.month) {
+    state.tasks = cloneTasks(merged);
+    rerenderAfterMerge();
+  }
+  setSaveStatus("saving", "다른 사용자 변경 합치는 중...");
+}
+
+// 저장 실패 메시지 (apiFetchJson과 같은 형식)
+async function buildHttpError(res, path) {
+  let detail = "";
+  try {
+    const body = await res.json();
+    detail = body && body.error ? ` - ${body.error}` : "";
+  } catch (e) {
+    if (res.status === 404) detail = " - 해당 API 파일이 배포되지 않았습니다";
+  }
+  return new Error(`${res.status} ${res.statusText}${detail} (${path})`);
+}
 
 function setSaveStatus(kind, text) {
   const el = document.getElementById("saveStatus");
@@ -177,11 +282,29 @@ async function flushSave() {
   saveState.pending = null;
   saveState.inFlight = true;
   try {
-    await apiFetchJson("/api/tasks", {
+    const base = saveState.bases[job.month];
+    const res = await fetch(API_BASE + withNs("/api/tasks"), {
       method: "PUT",
+      cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: job.month, tasks: job.tasks })
+      // baseVersion: 이 화면이 마지막으로 서버와 맞춘 버전. 다르면 서버가 409로 최신 목록을 돌려줌
+      body: JSON.stringify({ month: job.month, tasks: job.tasks, baseVersion: base ? base.version : -1 })
     });
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (!Array.isArray(body.tasks)) throw new Error(`409 충돌${body.error ? " - " + body.error : ""} (/api/tasks)`);
+      saveState.conflictRetries += 1;
+      if (saveState.conflictRetries > 3) {
+        saveState.conflictRetries = 0;
+        throw new Error("409 충돌이 계속 발생합니다. 새로고침 후 다시 시도해 주세요. (/api/tasks)");
+      }
+      handleSaveConflict(job, body); // 합친 내용이 pending에 올라가고, finally에서 바로 다시 저장
+      return;
+    }
+    if (!res.ok) throw await buildHttpError(res, "/api/tasks");
+    const data = await res.json();
+    saveState.conflictRetries = 0;
+    rememberBase(job.month, Number(data.version) || 0, data.tasks || job.tasks);
     saveState.lastError = null;
     const t = new Date();
     setSaveStatus("ok", `저장됨 ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
@@ -217,6 +340,30 @@ window.addEventListener("beforeunload", (e) => {
     e.returnValue = "";
   }
 });
+
+// 다른 사람이 저장한 내용 반영: 창으로 돌아올 때 + 1분마다(화면이 보일 때만) 서버 버전을 확인해
+// 바뀌었으면 목록을 새로 불러옵니다. 저장 대기 중이거나 셀 입력 중이면 건너뜁니다.
+async function refreshIfChanged() {
+  if (!API_BASE || !state.currentMonth || document.visibilityState !== "visible") return;
+  if (saveState.pending || saveState.inFlight || isEditingSheet()) return;
+  const month = state.currentMonth;
+  try {
+    const data = await apiFetchJson(`/api/tasks?month=${encodeURIComponent(month)}`);
+    if (month !== state.currentMonth || saveState.pending || saveState.inFlight || isEditingSheet()) return;
+    const version = Number(data.version) || 0;
+    const base = saveState.bases[month];
+    if (base && base.version === version) return;
+    const tasks = data.tasks || [];
+    rememberBase(month, version, tasks);
+    try { localStorage.setItem(localTasksKey(month), JSON.stringify(tasks)); } catch (e) {}
+    state.tasks = cloneTasks(tasks);
+    state.tasks.forEach(recomputeHours);
+    renumber();
+    renderAll();
+  } catch (e) { /* 확인 실패는 조용히 무시 (다음 확인 때 재시도) */ }
+}
+document.addEventListener("visibilitychange", refreshIfChanged);
+setInterval(refreshIfChanged, 60000);
 
 async function loadSettings(month) {
   if (!API_BASE) {
@@ -430,7 +577,8 @@ async function saveCarriedTasks(month, tasks) {
     await apiFetchJson("/api/tasks", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month, tasks })
+      // 새로 만든 월이라 덮어써도 되므로 force (버전 확인 생략)
+      body: JSON.stringify({ month, tasks, force: true })
     });
   } catch (err) {
     console.error("[이월 업무 저장 실패]", err);
@@ -2140,7 +2288,7 @@ async function checkConnection() {
     const res = await fetch(`${API_BASE}${withNs("/api/tasks")}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: "__연결테스트__", tasks: [] })
+      body: JSON.stringify({ month: "__연결테스트__", tasks: [], force: true })
     });
     if (res.ok) {
       writeOk = true;
@@ -2256,8 +2404,7 @@ async function generateWeeklyReport() {
     const valid = tasks.filter(t => t.status !== "취소" && (t.title || "").trim());
 
     // GA는 별도 섹션으로 빼고, 나머지를 완료/진행/접수로 나눕니다.
-    // (weeklyNoGA 화면은 GA 업무를 보고서에서 아예 제외)
-    const gaList = APP_OPTIONS.weeklyNoGA ? [] : valid.filter(t => t.major === "GA");
+    const gaList = valid.filter(t => t.major === "GA");
     const rest = valid.filter(t => t.major !== "GA");
 
     // 완료: 완료일이 대상 기간 내
@@ -2299,16 +2446,12 @@ async function generateWeeklyReport() {
     pushSection(lines, `▧ 접수(검토 중) ${receivedList.length}건`,
       receivedList, t => t.receivedDate ? mdShort(t.receivedDate) : "");
 
-    if (!APP_OPTIONS.weeklyNoGA) {
-      pushSection(lines, `▧ GA ${gaList.length}건`,
-        gaList, t => t.dueDate ? mdShort(t.dueDate) : (t.doneDate ? mdShort(t.doneDate) : ""));
-    }
+    pushSection(lines, `▧ GA ${gaList.length}건`,
+      gaList, t => t.dueDate ? mdShort(t.dueDate) : (t.doneDate ? mdShort(t.doneDate) : ""));
 
-    if (!APP_OPTIONS.weeklyNoFocus) {
-      lines.push("----------");
-      lines.push("• 기업 중점 과제");
-      lines.push("");
-    }
+    lines.push("----------");
+    lines.push("• 기업 중점 과제");
+    lines.push("");
 
     if (needCheck.length) {
       lines.push("----------");
