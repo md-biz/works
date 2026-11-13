@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>블로그 게시 관리</title>
 <!-- 로그인 (모든 API 요청보다 먼저 불러와야 합니다) -->
-<script src="webapp/auth.js?v=20261029c"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
+<script src="webapp/auth.js?v=20261113a"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" />
 <script>
   /* =========================================================
      설정
@@ -41,8 +43,8 @@
     --on-primary: #ffffff;
     --danger: #d70015;
 
-    --font-display: "Pretendard Variable", "SF Pro Display", system-ui, -apple-system, sans-serif;
-    --font-text: "Pretendard Variable", "SF Pro Text", system-ui, -apple-system, sans-serif;
+    --font-display: "Noto Sans KR", system-ui, -apple-system, sans-serif;
+    --font-text: "Noto Sans KR", system-ui, -apple-system, sans-serif;
     --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
     --r-xs: 5px;
@@ -72,7 +74,7 @@
   .brand-mark { font-size: 18px; color: var(--primary-on-dark); }
   .brand-text h1 {
     margin: 0; font-family: var(--font-display);
-    font-size: 21px; font-weight: 600; letter-spacing: 0.231px; white-space: nowrap;
+    font-size: 21px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap;
   }
   .brand:hover .brand-text h1 { color: var(--primary-on-dark); }
   .api-status { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -101,7 +103,7 @@
   .toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .tab-btn {
     border: none; background: transparent; padding: 9px 18px; border-radius: var(--r-pill);
-    font-size: 14px; font-weight: 400; letter-spacing: -0.224px; color: var(--ink-muted-80);
+    font-size: 14px; font-weight: 400; letter-spacing: -0.01em; color: var(--ink-muted-80);
     cursor: default;
   }
   .tab-btn.active { background: rgba(0, 102, 204, 0.1); color: var(--primary); font-weight: 600; }
@@ -141,7 +143,7 @@
   .btn {
     border: 1px solid var(--primary); background: var(--canvas); color: var(--primary);
     padding: 10px 20px; border-radius: var(--r-pill); font-size: 14px; font-weight: 400;
-    letter-spacing: -0.224px; cursor: pointer; transition: transform .1s, background .15s;
+    letter-spacing: -0.01em; cursor: pointer; transition: transform .1s, background .15s;
     white-space: nowrap;
   }
   .btn:active:not(:disabled) { transform: scale(0.95); }
@@ -173,13 +175,13 @@
   table { border-collapse: collapse; width: max-content; min-width: 100%; }
   thead th {
     position: sticky; top: 0; background: var(--canvas-parchment); color: var(--ink-muted-80);
-    font-size: 12px; font-weight: 600; letter-spacing: -0.224px; padding: 8px 10px;
+    font-size: 12px; font-weight: 600; letter-spacing: -0.01em; padding: 8px 10px;
     border-bottom: 1px solid var(--hairline); border-right: 1px solid var(--divider-soft);
     text-align: left; white-space: nowrap; z-index: 2;
   }
   #theadGroup th {
     top: 0; height: 30px; background: #ececee; font-size: 11px; color: var(--ink-muted-48);
-    letter-spacing: 0.02em; z-index: 3;
+    letter-spacing: 0; z-index: 3;
   }
   #theadCols th { top: 30px; }
   thead th.sticky-col { left: 0; z-index: 4; }
@@ -199,7 +201,7 @@
   /* 인라인 입력 */
   tbody input.ed, tbody select.ed, tbody textarea.ed {
     width: 100%; border: 1px solid transparent; background: transparent;
-    font-family: var(--font-text); font-size: 13px; letter-spacing: -0.224px; line-height: 1.4;
+    font-family: var(--font-text); font-size: 13px; letter-spacing: -0.01em; line-height: 1.4;
     padding: 5px; border-radius: var(--r-xs); color: var(--ink);
     transition: border-color .12s;
   }
@@ -269,8 +271,8 @@
   .global-nav::-webkit-scrollbar { display: none; }
   .global-nav a {
     position: relative; display: inline-flex; align-items: center; height: 100%; padding: 0 14px;
-    font-family: "Pretendard Variable", "SF Pro Text", system-ui, -apple-system, sans-serif;
-    font-size: 13px; font-weight: 400; letter-spacing: -0.12px; white-space: nowrap;
+    font-family: "Noto Sans KR", system-ui, -apple-system, sans-serif;
+    font-size: 13px; font-weight: 400; letter-spacing: -0.01em; white-space: nowrap;
     color: rgba(255, 255, 255, 0.64); text-decoration: none; transition: color .15s;
   }
   .global-nav a:hover { color: #ffffff; }
@@ -295,7 +297,7 @@
     background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--r-lg); overflow: hidden;
   }
   .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 4px; }
-  .modal-head h2 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; letter-spacing: 0.231px; }
+  .modal-head h2 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; letter-spacing: -0.02em; }
   .modal-desc { margin: 0; padding: 0 24px 14px; font-size: 13px; color: var(--ink-muted-48); }
   .modal-close {
     width: 32px; height: 32px; border: none; border-radius: var(--r-pill); background: var(--surface-chip);
@@ -339,7 +341,7 @@
   .url-cell { display: flex; align-items: center; gap: 2px; min-height: 30px; }
   .url-cell .url-link {
     flex: 1; min-width: 0; padding: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 13px; letter-spacing: -0.224px; color: var(--primary); text-decoration: none;
+    font-size: 13px; letter-spacing: -0.01em; color: var(--primary); text-decoration: none;
   }
   .url-cell .url-link:hover { text-decoration: underline; text-underline-offset: 3px; }
   .url-edit {
@@ -356,7 +358,7 @@
   /* 상단 안내 + 진행현황 집계 */
   .intro { padding: 16px 24px 0; background: var(--canvas); }
   .intro p { margin: 0; }
-  .intro-desc { font-size: 14px; letter-spacing: -0.224px; color: var(--ink-muted-80); }
+  .intro-desc { font-size: 14px; letter-spacing: -0.01em; color: var(--ink-muted-80); }
   .intro-desc a { color: var(--primary); text-decoration: none; font-weight: 600; }
   .intro-desc a:hover { text-decoration: underline; text-underline-offset: 3px; }
   .intro-desc a::after { content: " ↗"; font-size: 11px; opacity: .7; }
@@ -402,7 +404,7 @@
   .status-tabs button {
     display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent;
     padding: 7px 14px; border-radius: var(--r-pill); font-size: 13px; font-weight: 400;
-    letter-spacing: -0.224px; color: var(--ink-muted-80) !important; cursor: pointer; white-space: nowrap;
+    letter-spacing: -0.01em; color: var(--ink-muted-80) !important; cursor: pointer; white-space: nowrap;
   }
   .status-tabs button:hover { background: rgba(0, 0, 0, 0.04); }
   .status-tabs button:active { transform: scale(0.95); }
