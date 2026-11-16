@@ -1,5 +1,5 @@
 const { withApi } = require("./_cors");
-const { getJSON, setJSON } = require("./_kv");
+const { getJSON, setJSON, casWrite } = require("./_kv");
 const { resolveNs } = require("./_ns");
 const { randomUUID } = require("crypto");
 const detail = require("./_detail");
@@ -19,8 +19,9 @@ module.exports = withApi(async (req, res) => {
   if (req.method === "GET") {
     const month = req.query.month;
     if (!month) return res.status(400).json({ error: "month 쿼리 파라미터가 필요합니다." });
-    const tasks = await getJSON(ns.key(`tasks:${month}`), []);
+    // 버전을 먼저 읽습니다. (읽는 사이 다른 저장이 끼어들어도 "예전 목록 + 새 버전" 조합이 나가지 않도록)
     const version = await getVer(month);
+    const tasks = await getJSON(ns.key(`tasks:${month}`), []);
     return res.status(200).json({ tasks, version });
   }
 
@@ -42,29 +43,21 @@ module.exports = withApi(async (req, res) => {
     // - force: true — 새 월 이월 복사, 연결 확인 테스트처럼 덮어써도 되는 경우만 사용
     const { month, tasks, baseVersion, force } = req.body || {};
     if (!month || !Array.isArray(tasks)) return res.status(400).json({ error: "month, tasks 배열이 필요합니다." });
-    const current = await getVer(month);
+    const conflict = async (error) => res.status(409).json({
+      error, conflict: true, version: await getVer(month), tasks: await getJSON(ns.key(`tasks:${month}`), [])
+    });
 
-    if (!force) {
-      if (baseVersion === undefined || baseVersion === null) {
-        // 예전 app.js(버전 정보 없이 월 전체를 덮어쓰던 화면)가 다른 사람 수정분을 지우지 않도록 막습니다.
-        return res.status(409).json({
-          error: "화면이 예전 버전입니다. 새로고침(Ctrl+F5) 후 다시 입력해 주세요.",
-          conflict: true, version: current, tasks: await getJSON(ns.key(`tasks:${month}`), [])
-        });
-      }
-      if (Number(baseVersion) !== current) {
-        return res.status(409).json({
-          error: "다른 화면에서 먼저 저장된 내용이 있습니다.",
-          conflict: true, version: current, tasks: await getJSON(ns.key(`tasks:${month}`), [])
-        });
-      }
+    if (!force && (baseVersion === undefined || baseVersion === null)) {
+      // 예전 app.js(버전 정보 없이 월 전체를 덮어쓰던 화면)가 다른 사람 수정분을 지우지 않도록 막습니다.
+      return conflict("화면이 예전 버전입니다. 새로고침(Ctrl+F5) 후 다시 입력해 주세요.");
     }
 
+    // 버전 확인과 저장을 한 번에 처리 — 두 사람이 같은 순간에 저장해도 한 명만 통과하고,
+    // 다른 한 명은 409로 최신 목록을 받아 화면에서 합친 뒤 다시 저장합니다.
     const withIds = tasks.map(t => ({ ...t, id: t.id || randomUUID() }));
-    await setJSON(ns.key(`tasks:${month}`), withIds);
-    const version = current + 1;
-    await setJSON(verKey(month), version);
-    return res.status(200).json({ tasks: withIds, version });
+    const r = await casWrite(verKey(month), force ? null : Number(baseVersion), [[ns.key(`tasks:${month}`), withIds]]);
+    if (!r.ok) return conflict("다른 화면에서 먼저 저장된 내용이 있습니다.");
+    return res.status(200).json({ tasks: withIds, version: r.version });
   }
 
   return res.status(405).json({ error: "지원하지 않는 메서드입니다." });

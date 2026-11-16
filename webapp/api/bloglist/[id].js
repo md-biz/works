@@ -1,42 +1,39 @@
-// 블로그 게시 관리 개별 행 수정
-//   PATCH  /api/bloglist/{id}  body { 필드명: 값 }  → { item: {...} }
-//   DELETE /api/bloglist/{id}                      → { deleted: id }
+// 블로그 게시 관리(bloglist.html) 행 수정 API
+//   PATCH  /api/bloglist/<id>   body { 필드: 값, ... }  → { item: {...} }
+//   DELETE /api/bloglist/<id>                           → { deleted: 0|1 }
+// 보낸 필드만 바꿉니다. 같은 순간에 다른 사람이 다른 행(또는 같은 행의 다른 칸)을 저장해도 서로 덮어쓰지 않습니다.
 
 const { withApi } = require("../_cors");
-const { getJSON, setJSON } = require("../_kv");
-
-const KEY = "bloglist";
-const FIELDS = {
-  blog_date: 10, title: 200, url: 1000, category: 0, biz_category: 0, product: 30, keyword: 500,
-  stg_thumb: 20, stg_pub: 20, stg_review: 1000, prod_review: 1000, received_date: 10, open_date: 10, status: 10, note: 1000
-};
+const { updateList } = require("../_kv");
+const { BLOG_KEY: KEY, BLOG_FIELDS: FIELDS, blogValue, rowId, parseBody } = require("../_lists");
 
 module.exports = withApi(async (req, res) => {
-  const { id } = req.query;
+  const id = rowId(req);
+  if (!id) return res.status(400).json({ error: "id 값이 필요합니다." });
 
   if (req.method === "PATCH" || req.method === "PUT") {
-    const patch = req.body || {};
-    const rows = await getJSON(KEY, []);
-    const idx = rows.findIndex(r => r.id === id);
-    if (idx === -1) return res.status(404).json({ error: "해당 행을 찾을 수 없습니다." });
-    // 정의된 필드만 반영 (id / created_at 은 덮어쓰지 않음)
-    const safe = {};
-    Object.keys(patch).forEach(k => {
-      if (!(k in FIELDS)) return;
-      let v = patch[k] == null ? "" : String(patch[k]).trim();
-      if (FIELDS[k]) v = v.slice(0, FIELDS[k]);
-      safe[k] = v === "" ? null : v;
+    const body = parseBody(req);
+    const patch = {};
+    Object.keys(FIELDS).forEach((f) => { if (body[f] !== undefined) patch[f] = blogValue(f, body[f]); });
+    if (!Object.keys(patch).length) return res.status(400).json({ error: "수정할 항목이 없습니다." });
+
+    const item = await updateList(KEY, (rows) => {
+      const i = rows.findIndex((r) => r.id === id);
+      if (i < 0) return { skip: true, result: null };
+      const next = rows.slice();
+      next[i] = { ...rows[i], ...patch, updated_at: new Date().toISOString() };
+      return { rows: next, result: next[i] };
     });
-    rows[idx] = { ...rows[idx], ...safe };
-    await setJSON(KEY, rows);
-    return res.status(200).json({ item: rows[idx] });
+    if (!item) return res.status(404).json({ error: "행을 찾을 수 없습니다. 다른 사용자가 삭제했을 수 있습니다." });
+    return res.status(200).json({ item });
   }
 
   if (req.method === "DELETE") {
-    const rows = await getJSON(KEY, []);
-    const next = rows.filter(r => r.id !== id);
-    await setJSON(KEY, next);
-    return res.status(200).json({ deleted: id });
+    const deleted = await updateList(KEY, (rows) => {
+      const next = rows.filter((r) => r.id !== id);
+      return next.length === rows.length ? { skip: true, result: 0 } : { rows: next, result: 1 };
+    });
+    return res.status(200).json({ deleted });
   }
 
   return res.status(405).json({ error: "지원하지 않는 메서드입니다." });

@@ -59,8 +59,15 @@ module.exports = withApi(async (req, res) => {
       return bad(res, 403, "사용이 중지된 계정입니다. 관리자에게 문의하세요.");
     }
     await A.clearFail(em);
+    // 최근 로그인 시각 기록: 비밀번호 확인(시간이 걸림) 사이에 관리자가 사용자를 추가·변경했을 수 있으므로,
+    // 저장 직전에 사용자 목록을 다시 읽어 이 사용자의 로그인 시각만 바꿉니다. (다른 변경을 되돌리지 않도록)
     user.lastLoginAt = new Date().toISOString();
-    await A.saveUsers(users);
+    const fresh = await A.getUsers();
+    const freshUser = fresh.find((u) => u.email === em);
+    if (freshUser) {
+      freshUser.lastLoginAt = user.lastLoginAt;
+      await A.saveUsers(fresh);
+    }
     const token = await A.createSession(user);
     return res.status(200).json({ token, user: A.publicUser(user) });
   }

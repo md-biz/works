@@ -61,6 +61,99 @@ function hdApplyData(data) {
   holidayState.leaves = (data && Array.isArray(data.leaves)) ? data.leaves : [];
 }
 
+// ---------------- 여러 사람이 함께 쓸 때의 저장 (서버 최신본과 합치기) ----------------
+// 휴가·공휴일은 "목록 전체"를 서버에 저장합니다. 예전에는 내 화면의 목록을 그대로 덮어썼기 때문에,
+// 내가 화면을 연 뒤에 다른 사람이 등록한 휴가가 내 저장으로 사라질 수 있었습니다.
+// 지금은 저장 직전에 서버 최신 목록을 받아 "내가 바꾼 부분(추가·수정·삭제)"만 얹어서 저장합니다.
+
+const hdSync = {
+  base: null,               // 마지막으로 서버와 맞춘 상태 { holidays, leaves } — 내가 바꾼 부분을 가려내는 기준
+  chain: Promise.resolve(), // 저장을 한 번에 하나씩 순서대로 처리
+  saving: 0,
+  lastCheck: 0,
+  retryTimer: null, retryCount: 0
+};
+
+function hdClone(v) { return JSON.parse(JSON.stringify(v)); }
+function hdNormalize(data) {
+  return {
+    holidays: (data && data.holidays && typeof data.holidays === "object" && !Array.isArray(data.holidays)) ? data.holidays : {},
+    leaves: (data && Array.isArray(data.leaves)) ? data.leaves : []
+  };
+}
+// 키 순서와 무관하게 내용이 같은지 비교하기 위한 문자열
+function hdStable(v) {
+  if (Array.isArray(v)) return "[" + v.map(hdStable).join(",") + "]";
+  if (v && typeof v === "object") {
+    return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + hdStable(v[k])).join(",") + "}";
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+function hdItemKey(x) { return (x && x.id) || hdStable(x); }
+
+// base(마지막으로 맞춘 상태) · local(내 화면) · server(서버 최신) 세 목록을 합칩니다.
+// - 내가 추가·수정한 항목은 내 것을, 내가 지운 항목은 제외, 나머지는 서버 내용을 그대로 따릅니다.
+// - 다른 사람이 지운 항목을 내가 수정했다면 내용 보존을 위해 남깁니다.
+function hdMergeList(base, local, server) {
+  const baseMap = new Map(base.map(x => [hdItemKey(x), x]));
+  const localMap = new Map(local.map(x => [hdItemKey(x), x]));
+  const changedByMe = (k, l) => { const b = baseMap.get(k); return !b || hdStable(b) !== hdStable(l); };
+  const out = [];
+  const seen = new Set();
+  server.forEach(s => {
+    const k = hdItemKey(s);
+    if (seen.has(k)) return;
+    seen.add(k);
+    const l = localMap.get(k);
+    if (!l) { if (!baseMap.has(k)) out.push(s); return; } // 내가 지운 항목은 제외, 남이 추가한 항목은 유지
+    out.push(changedByMe(k, l) ? l : s);
+  });
+  local.forEach(l => {
+    const k = hdItemKey(l);
+    if (seen.has(k)) return;
+    seen.add(k);
+    if (changedByMe(k, l)) out.push(l);
+  });
+  return out;
+}
+
+function hdFlatHolidays(holidays) {
+  const out = [];
+  Object.keys(holidays || {}).forEach(y => (holidays[y] || []).forEach(h => { if (h) out.push(h); }));
+  return out;
+}
+
+// 서버 최신 데이터와 내 화면의 변경분을 합친 결과 { holidays, leaves }
+function hdMergeWithServer(serverData) {
+  const server = hdNormalize(serverData);
+  const base = hdSync.base || { holidays: {}, leaves: [] };
+
+  const leaves = hdMergeList(base.leaves, holidayState.leaves, server.leaves)
+    .sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+
+  // 공휴일: 연도 구분 없이 합친 뒤 날짜의 연도로 다시 묶습니다. (두 사람이 같은 공휴일을 각각 불러온 경우 중복 제거)
+  const holidays = {};
+  const dup = new Set();
+  hdMergeList(hdFlatHolidays(base.holidays), hdFlatHolidays(holidayState.holidays), hdFlatHolidays(server.holidays))
+    .forEach(h => {
+      const sig = `${h.date}|${h.name}`;
+      if (dup.has(sig)) return;
+      dup.add(sig);
+      const y = String(h.date || "").slice(0, 4) || "기타";
+      (holidays[y] = holidays[y] || []).push(h);
+    });
+  Object.keys(holidays).forEach(y => holidays[y].sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))));
+
+  return { holidays, leaves, server };
+}
+
+function hdModalOpen() {
+  return ["leaveModal", "holidayModal"].some(id => {
+    const m = document.getElementById(id);
+    return m && m.style.display === "flex";
+  });
+}
+
 async function loadHolidayData() {
   let local = null;
   try { local = JSON.parse(localStorage.getItem(hdLocalKey()) || "null"); } catch (e) { local = null; }
@@ -77,27 +170,115 @@ async function loadHolidayData() {
     console.error("[휴일 데이터 불러오기 실패]", err);
     hdApplyData(local);
   }
+  hdSync.base = hdClone(hdNormalize(holidayState));
   holidayState.loaded = true;
 }
 
-// part: "holidays" | "leaves"
-async function saveHolidayData(part) {
-  hdSaveLocal();
-  if (!API_BASE) return;
-  setSaveStatus("saving", "저장 중...");
+// 다른 사용자가 등록한 휴가·공휴일 반영: 휴가공유/요약 화면을 열 때, 창으로 돌아올 때, 1분마다 확인합니다.
+// 팝업이 열려 있거나 저장 중이면 건너뜁니다. 아직 저장하지 못한 내 변경은 그대로 유지됩니다.
+async function hdRefreshFromServer() {
+  if (!API_BASE || !holidayState.loaded || hdSync.saving) return;
+  if (document.visibilityState !== "visible" || hdModalOpen()) return;
+  if (typeof state === "undefined" || (state.view !== "holiday" && state.view !== "summary")) return;
+  if (Date.now() - hdSync.lastCheck < 10000) return;
+  hdSync.lastCheck = Date.now();
   try {
-    await apiFetchJson("/api/holidays" + hdNsQuery(), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [part]: holidayState[part] })
-    });
+    const data = await apiFetchJson("/api/holidays" + hdNsQuery());
+    if (hdSync.saving || hdModalOpen()) return;
+    const merged = hdMergeWithServer(data);
+    const before = hdStable(hdNormalize(holidayState));
+    holidayState.holidays = merged.holidays;
+    holidayState.leaves = merged.leaves;
+    hdSync.base = hdClone(merged.server);
+    hdSaveLocal();
+    if (hdStable(hdNormalize(holidayState)) !== before) hdRefreshViews();
+  } catch (e) { /* 확인 실패는 조용히 무시 (다음 확인 때 재시도) */ }
+}
+document.addEventListener("visibilitychange", hdRefreshFromServer);
+window.addEventListener("focus", hdRefreshFromServer);
+setInterval(hdRefreshFromServer, 60000);
+
+// part: "holidays" | "leaves"
+// 저장은 한 번에 하나씩 순서대로 처리합니다. (연달아 저장해도 서로 덮어쓰지 않도록)
+function saveHolidayData(part) {
+  hdSaveLocal();
+  if (!API_BASE) return Promise.resolve();
+  const run = () => hdSaveNow(part);
+  hdSync.chain = hdSync.chain.then(run, run);
+  return hdSync.chain;
+}
+
+async function hdSaveNow(part) {
+  setSaveStatus("saving", "저장 중...");
+  hdSync.saving += 1;
+  try {
+    // 서버 최신본을 받아 내 변경분(추가·수정·삭제)만 얹어 저장합니다.
+    // 서버는 "내가 받은 버전(baseVersion)과 지금 버전이 같을 때만" 저장하고, 그사이 다른 사람이 저장했으면
+    // 409 로 최신본을 돌려줍니다 → 다시 합쳐서 저장 (최대 6회).
+    const path = "/api/holidays" + hdNsQuery();
+    let data = await apiFetchJson(path);
+    let saved = false;
+    for (let attempt = 0; attempt < 6 && !saved; attempt++) {
+      const merged = hdMergeWithServer(data);
+      const before = hdStable(hdNormalize(holidayState));
+      holidayState.holidays = merged.holidays;
+      holidayState.leaves = merged.leaves;
+      hdSync.base = hdClone(merged.server);
+      hdSaveLocal();
+      if (hdStable(hdNormalize(holidayState)) !== before) hdRefreshViews(); // 다른 사용자 변경이 있었으면 화면에도 반영
+
+      // 서버와 달라진 부분만 저장 (이전에 저장하지 못한 다른 부분이 있으면 함께)
+      const body = {};
+      ["holidays", "leaves"].forEach(p => {
+        if (hdStable(holidayState[p]) !== hdStable(merged.server[p])) body[p] = holidayState[p];
+      });
+      if (!Object.keys(body).length) { saved = true; break; } // 서버 내용과 같음 → 저장 완료
+
+      const versioned = data && typeof data.version === "number"; // 서버(api/holidays.js)가 버전 확인을 지원하는지
+      if (versioned) body.baseVersion = data.version;
+      const res = await fetch(API_BASE + withNs(path), {
+        method: "PUT",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (res.status === 409) {
+        const latest = await res.json().catch(() => ({}));
+        if (!latest || !Array.isArray(latest.leaves)) throw new Error(`409 충돌${latest && latest.error ? " - " + latest.error : ""} (/api/holidays)`);
+        data = latest; // 최신본 기준으로 다시 합쳐서 저장
+        continue;
+      }
+      if (!res.ok) throw await buildHttpError(res, "/api/holidays");
+      if (versioned) {
+        hdSync.base = hdClone(hdNormalize(holidayState));
+        saved = true;
+        break;
+      }
+      // 서버가 예전 버전(버전 확인 없음)일 때: 다시 읽어 내 변경이 실제로 남았는지 확인합니다.
+      await new Promise(r => setTimeout(r, 150 + Math.random() * 300));
+      data = await apiFetchJson(path);
+    }
+    if (!saved) throw new Error("다른 사용자의 저장과 계속 겹칩니다. 잠시 후 자동으로 다시 시도합니다. (/api/holidays)");
+    hdSync.retryCount = 0;
+    if (hdSync.retryTimer) { clearTimeout(hdSync.retryTimer); hdSync.retryTimer = null; }
     const t = new Date();
     setSaveStatus("ok", `저장됨 ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
   } catch (err) {
     saveState.lastError = ((err && err.message) || String(err)) +
-      "\n\n[확인] api/holidays.js 파일을 올리고 Vercel 에서 Redeploy 했는지 확인하세요. (이 브라우저에는 저장되어 있습니다)";
-    setSaveStatus("error", "저장 실패 (클릭)");
+      "\n\n[확인] api/holidays.js 파일을 올리고 Vercel 에서 Redeploy 했는지 확인하세요. (이 브라우저에는 저장되어 있으며, 자동으로 다시 저장을 시도합니다)";
+    setSaveStatus("error", "저장 실패 · 자동 재시도 중 (클릭)");
+    // 자동 재시도: 5초 → 15초 → 이후 1분 간격 (최대 10회)
+    if (hdSync.retryCount < 10 && !hdSync.retryTimer) {
+      const delay = [5000, 15000, 60000][Math.min(hdSync.retryCount, 2)];
+      hdSync.retryCount += 1;
+      hdSync.retryTimer = setTimeout(() => {
+        hdSync.retryTimer = null;
+        saveHolidayData(part).catch(() => {});
+      }, delay);
+    }
     throw err;
+  } finally {
+    hdSync.saving -= 1;
   }
 }
 

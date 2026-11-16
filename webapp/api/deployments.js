@@ -3,23 +3,12 @@
 //   POST   /api/deployments   body {}  → { deployment: {...} }   (빈 행 1건 추가)
 //   DELETE /api/deployments   body { ids: [...] } → { deleted: n }
 // 개별 행 수정은 api/deployments/[id].js (PATCH) 가 담당합니다.
+// 추가·삭제·수정은 모두 updateList 로 처리해, 여러 사람이 같은 순간에 저장해도 서로 덮어쓰지 않습니다.
 
 const { withApi } = require("./_cors");
-const { getJSON, setJSON } = require("./_kv");
+const { getJSON, updateList } = require("./_kv");
+const { DEPLOY_KEY: KEY, DEPLOY_FIELDS: FIELDS, parseBody } = require("./_lists");
 const { randomUUID } = require("crypto");
-
-const KEY = "deployments";
-
-// developlist.html 의 COLUMNS 와 동일한 필드 구성
-const FIELDS = [
-  "deploy_date", "deploy_time", "deploy_type", "category", "work_type", "scope", "rms_no",
-  "task_name", "file_list",
-  "requester", "planner", "publisher", "developer",
-  "impact",
-  "stg_review_at", "stg_reviewer",
-  "prod_review_at", "prod_reviewer",
-  "confirm_up"
-];
 
 function blankRow() {
   const row = { id: randomUUID(), created_at: new Date().toISOString() };
@@ -36,20 +25,20 @@ module.exports = withApi(async (req, res) => {
   }
 
   if (req.method === "POST") {
-    const rows = await getJSON(KEY, []);
     const row = blankRow();
-    rows.push(row);
-    await setJSON(KEY, rows);
+    await updateList(KEY, (rows) => ({ rows: rows.concat([row]) }));
     return res.status(201).json({ deployment: row });
   }
 
   if (req.method === "DELETE") {
-    const { ids } = req.body || {};
+    const { ids } = parseBody(req);
     if (!Array.isArray(ids)) return res.status(400).json({ error: "ids 배열이 필요합니다." });
-    const rows = await getJSON(KEY, []);
-    const next = rows.filter(r => !ids.includes(r.id));
-    await setJSON(KEY, next);
-    return res.status(200).json({ deleted: rows.length - next.length });
+    const deleted = await updateList(KEY, (rows) => {
+      const next = rows.filter(r => !ids.includes(r.id));
+      const n = rows.length - next.length;
+      return n ? { rows: next, result: n } : { skip: true, result: 0 };
+    });
+    return res.status(200).json({ deleted });
   }
 
   return res.status(405).json({ error: "지원하지 않는 메서드입니다." });

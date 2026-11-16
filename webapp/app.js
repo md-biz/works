@@ -138,10 +138,17 @@ async function loadTasks(month) {
 
 // 저장 상태 표시 (헤더 우측)
 const saveState = {
-  timer: null, inFlight: false, pending: null, lastError: null,
+  timer: null, inFlight: false, lastError: null,
+  queue: {},          // 월별 저장 대기 목록 { "10월": tasks } — 저장에 성공할 때까지 남아 있습니다
   bases: {},          // 월별 { version, tasks } — 마지막으로 서버와 맞춘 상태 (충돌 시 병합 기준)
-  conflictRetries: 0  // 연속 충돌 횟수 (무한 반복 방지)
+  conflictRetries: 0, // 연속 충돌 횟수 (무한 반복 방지)
+  retryTimer: null, retryCount: 0 // 저장 실패 시 자동 재시도
 };
+
+// 아직 서버에 저장되지 않은 변경이 있는지 (저장 중 · 저장 대기 · 실패 후 재시도 대기 모두 포함)
+function hasUnsaved() {
+  return saveState.inFlight || Object.keys(saveState.queue).length > 0;
+}
 
 function cloneTasks(tasks) { return JSON.parse(JSON.stringify(tasks || [])); }
 
@@ -222,14 +229,10 @@ function handleSaveConflict(job, body) {
   const base = saveState.bases[job.month];
   const baseTasks = base ? base.tasks : [];
   // 저장 대기 중인 더 최신 변경이 있으면 그것까지 포함해서 합칩니다.
-  let local = job.tasks;
-  if (saveState.pending && saveState.pending.month === job.month) {
-    local = saveState.pending.tasks;
-    saveState.pending = null;
-  }
+  const local = saveState.queue[job.month] || job.tasks;
   const merged = mergeLocalChanges(baseTasks, local, body.tasks || []);
   rememberBase(job.month, Number(body.version) || 0, body.tasks || []);
-  saveState.pending = { month: job.month, tasks: cloneTasks(merged) };
+  saveState.queue[job.month] = cloneTasks(merged);
   try { localStorage.setItem(localTasksKey(job.month), JSON.stringify(merged)); } catch (e) {}
 
   if (state.currentMonth === job.month) {
@@ -270,17 +273,20 @@ async function persistTasks(month, tasks) {
   if (!API_BASE) return;
 
   // 2) 서버 저장은 디바운스해서 한 번에 (연속 입력 시 과도한 요청 방지)
-  saveState.pending = { month, tasks: JSON.parse(JSON.stringify(tasks)) };
+  saveState.queue[month] = cloneTasks(tasks);
   setSaveStatus("saving", "저장 중...");
   if (saveState.timer) clearTimeout(saveState.timer);
   saveState.timer = setTimeout(flushSave, 600);
 }
 
 async function flushSave() {
-  if (saveState.inFlight || !saveState.pending) return;
-  const job = saveState.pending;
-  saveState.pending = null;
+  if (saveState.inFlight) return;
+  const month = Object.keys(saveState.queue)[0];
+  if (!month) return;
+  const job = { month, tasks: saveState.queue[month] };
+  delete saveState.queue[month];
   saveState.inFlight = true;
+  let failed = false;
   try {
     const base = saveState.bases[job.month];
     const res = await fetch(API_BASE + withNs("/api/tasks"), {
@@ -294,21 +300,25 @@ async function flushSave() {
       const body = await res.json().catch(() => ({}));
       if (!Array.isArray(body.tasks)) throw new Error(`409 충돌${body.error ? " - " + body.error : ""} (/api/tasks)`);
       saveState.conflictRetries += 1;
-      if (saveState.conflictRetries > 3) {
+      if (saveState.conflictRetries > 5) {
         saveState.conflictRetries = 0;
         throw new Error("409 충돌이 계속 발생합니다. 새로고침 후 다시 시도해 주세요. (/api/tasks)");
       }
-      handleSaveConflict(job, body); // 합친 내용이 pending에 올라가고, finally에서 바로 다시 저장
+      handleSaveConflict(job, body); // 합친 내용이 대기 목록에 올라가고, finally에서 바로 다시 저장
       return;
     }
     if (!res.ok) throw await buildHttpError(res, "/api/tasks");
     const data = await res.json();
     saveState.conflictRetries = 0;
+    saveState.retryCount = 0;
     rememberBase(job.month, Number(data.version) || 0, data.tasks || job.tasks);
     saveState.lastError = null;
     const t = new Date();
     setSaveStatus("ok", `저장됨 ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
   } catch (err) {
+    failed = true;
+    // 저장하지 못한 내용은 버리지 않고 대기 목록에 되돌려 둡니다. (그 사이 더 최신 변경이 들어왔으면 그것을 유지)
+    if (!saveState.queue[job.month]) saveState.queue[job.month] = job.tasks;
     const msg = (err && err.message) || String(err);
     let hint = "";
     if (msg.includes("405")) {
@@ -326,16 +336,29 @@ async function flushSave() {
     }
     saveState.lastError = msg + hint;
     console.error("[저장 실패]", err);
-    setSaveStatus("error", "저장 실패 (클릭)");
+    setSaveStatus("error", "저장 실패 · 자동 재시도 중 (클릭)");
+    scheduleSaveRetry();
   } finally {
     saveState.inFlight = false;
-    if (saveState.pending) flushSave(); // 저장 중 들어온 변경 처리
+    if (!failed && Object.keys(saveState.queue).length) flushSave(); // 저장 중 들어온 변경 처리
   }
 }
 
+// 저장 실패 시 자동 재시도: 3초 → 10초 → 30초 → 이후 1분 간격. 인터넷이 다시 연결되면 바로 시도합니다.
+const SAVE_RETRY_DELAYS = [3000, 10000, 30000, 60000];
+function scheduleSaveRetry() {
+  if (saveState.retryTimer) clearTimeout(saveState.retryTimer);
+  const delay = SAVE_RETRY_DELAYS[Math.min(saveState.retryCount, SAVE_RETRY_DELAYS.length - 1)];
+  saveState.retryCount += 1;
+  saveState.retryTimer = setTimeout(() => { saveState.retryTimer = null; flushSave(); }, delay);
+}
+window.addEventListener("online", () => {
+  if (Object.keys(saveState.queue).length) flushSave();
+});
+
 // 저장이 끝나기 전에 창을 닫으려 하면 경고
 window.addEventListener("beforeunload", (e) => {
-  if (saveState.pending || saveState.inFlight) {
+  if (hasUnsaved()) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -343,13 +366,16 @@ window.addEventListener("beforeunload", (e) => {
 
 // 다른 사람이 저장한 내용 반영: 창으로 돌아올 때 + 1분마다(화면이 보일 때만) 서버 버전을 확인해
 // 바뀌었으면 목록을 새로 불러옵니다. 저장 대기 중이거나 셀 입력 중이면 건너뜁니다.
+// (저장하지 못한 변경이 남아 있는 동안에는 서버 내용으로 덮어쓰지 않습니다 — 저장 시 서버 최신본과 합쳐집니다)
+let lastRefreshCheck = 0;
 async function refreshIfChanged() {
   if (!API_BASE || !state.currentMonth || document.visibilityState !== "visible") return;
-  if (saveState.pending || saveState.inFlight || isEditingSheet()) return;
+  if (hasUnsaved() || isEditingSheet()) return;
+  lastRefreshCheck = Date.now();
   const month = state.currentMonth;
   try {
     const data = await apiFetchJson(`/api/tasks?month=${encodeURIComponent(month)}`);
-    if (month !== state.currentMonth || saveState.pending || saveState.inFlight || isEditingSheet()) return;
+    if (month !== state.currentMonth || hasUnsaved() || isEditingSheet()) return;
     const version = Number(data.version) || 0;
     const base = saveState.bases[month];
     if (base && base.version === version) return;
@@ -362,7 +388,13 @@ async function refreshIfChanged() {
     renderAll();
   } catch (e) { /* 확인 실패는 조용히 무시 (다음 확인 때 재시도) */ }
 }
-document.addEventListener("visibilitychange", refreshIfChanged);
+// 창으로 돌아올 때(탭 전환 · 다른 프로그램에서 복귀)는 바로 확인하되, 5초 안에 다시 확인하지는 않습니다.
+function refreshOnReturn() {
+  if (Date.now() - lastRefreshCheck < 5000) return;
+  refreshIfChanged();
+}
+document.addEventListener("visibilitychange", refreshOnReturn);
+window.addEventListener("focus", refreshOnReturn);
 setInterval(refreshIfChanged, 60000);
 
 async function loadSettings(month) {
@@ -524,6 +556,18 @@ async function addMonth() {
   const clean = label.trim().endsWith("월") ? label.trim() : `${label.trim()}월`;
   if (state.months.includes(clean)) { alert("이미 존재하는 월입니다."); return; }
 
+  // 다른 사용자가 그 사이 월 시트를 추가·삭제했을 수 있으므로, 서버의 최신 월 목록을 기준으로 추가합니다.
+  const latest = await latestMonths();
+  if (latest.includes(clean)) {
+    // 이미 다른 사용자가 만든 시트 — 이월 업무로 덮어쓰지 않고 그 시트로 이동만 합니다.
+    state.months = latest;
+    renderMonthTabs();
+    await switchMonth(clean);
+    alert(`'${clean}' 시트는 다른 사용자가 이미 추가했습니다. 해당 시트로 이동합니다.`);
+    return;
+  }
+  state.months = latest;
+
   // 이전 월 시트에서 진행현황이 "접수/진행/예정"인 업무를 원래 순서대로 가져옵니다.
   const carried = await carryOverTasks(clean);
 
@@ -535,6 +579,17 @@ async function addMonth() {
   await switchMonth(clean);
   if (carried.source) {
     alert(`'${carried.source}' 시트에서 진행현황이 접수·진행·예정인 업무 ${carried.tasks.length}건을 가져왔습니다.`);
+  }
+}
+
+// 서버의 최신 월 목록 (불러오지 못하면 지금 화면의 목록)
+async function latestMonths() {
+  if (!API_BASE) return state.months.slice();
+  try {
+    const months = await loadMonths();
+    return Array.isArray(months) && months.length ? months : state.months.slice();
+  } catch (e) {
+    return state.months.slice();
   }
 }
 
@@ -590,7 +645,8 @@ async function deleteMonth(month) {
   const ok = confirm("입력된 정보가 모두 삭제됩니다. 삭제하시겠습니까?");
   if (!ok) return; // N: 삭제하지 않고 닫기
 
-  state.months = state.months.filter(m => m !== month);
+  // 서버의 최신 월 목록에서 이 월만 뺍니다. (다른 사용자가 그 사이 추가한 월이 사라지지 않도록)
+  state.months = (await latestMonths()).filter(m => m !== month);
   await saveMonths(state.months);
 
   // 로컬 데모 모드일 때는 저장된 업무/설정 데이터도 함께 정리합니다.
@@ -662,6 +718,8 @@ function setView(view) {
   if (view === "summary") renderSummary();
   if (view === "holiday" && typeof renderHolidayView === "function") renderHolidayView();
   if (view === "dashboard") renderDashboard();
+  // 휴가공유 · 요약 화면을 열 때 다른 사용자가 등록한 휴가를 반영 (holiday.js)
+  if ((view === "holiday" || view === "summary") && typeof hdRefreshFromServer === "function") hdRefreshFromServer();
 }
 
 function renderAll() {
