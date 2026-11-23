@@ -19,24 +19,6 @@ const LEAVE_ROLE_COLORS = {
   GA: "role-ga"
 };
 
-// 기본 공휴일 (불러오기 버튼용 · 대체공휴일 포함) — 불러온 뒤 확인·수정하세요.
-const HOLIDAY_PRESETS = {
-  2026: [
-    ["2026-01-01", "신정"],
-    ["2026-02-16", "설날 연휴"], ["2026-02-17", "설날"], ["2026-02-18", "설날 연휴"],
-    ["2026-03-01", "삼일절"], ["2026-03-02", "대체공휴일(삼일절)"],
-    ["2026-05-05", "어린이날"],
-    ["2026-05-24", "부처님오신날"], ["2026-05-25", "대체공휴일(부처님오신날)"],
-    ["2026-06-03", "전국동시지방선거"],
-    ["2026-06-06", "현충일"],
-    ["2026-08-15", "광복절"], ["2026-08-17", "대체공휴일(광복절)"],
-    ["2026-09-24", "추석 연휴"], ["2026-09-25", "추석"], ["2026-09-26", "추석 연휴"],
-    ["2026-10-03", "개천절"], ["2026-10-05", "대체공휴일(개천절)"],
-    ["2026-10-09", "한글날"],
-    ["2026-12-25", "성탄절"]
-  ]
-};
-
 const holidayState = {
   holidays: {},   // { "2026": [{ id, name, date }] }
   leaves: [],     // [{ id, start, end, type, assignee, role, hours, days }]
@@ -784,7 +766,8 @@ function renderHolidayForm() {
   const el = document.getElementById("holidayForm");
   const y = String(holidayDraftYear);
   const list = holidayDraft[y] || (holidayDraft[y] = []);
-  const hasPreset = !!HOLIDAY_PRESETS[y];
+  // 디지털사업(index_biz.html)에서만: 업무관리(index.html)에 등록된 휴일을 불러오는 버튼
+  const canImportMain = !!(window.APP_NS && API_BASE);
 
   el.innerHTML = `
     <div class="hd-year-bar">
@@ -792,7 +775,7 @@ function renderHolidayForm() {
       <strong>${y}년</strong>
       <button type="button" class="hd-nav-btn" id="hdfNext">›</button>
       <span class="hd-year-count">${list.length}건</span>
-      ${hasPreset ? `<button type="button" class="btn btn-ghost hd-preset" id="hdfPreset">기본 공휴일 불러오기</button>` : ""}
+      ${canImportMain ? `<button type="button" class="btn btn-ghost hd-preset" id="hdfImportMain">업무관리 휴일 불러오기</button>` : ""}
     </div>
     <div class="hd-holiday-list">
       ${list.length ? "" : `<p class="hd-empty">등록된 휴일이 없습니다. '+ 휴일 추가'를 눌러 등록하세요.</p>`}
@@ -813,17 +796,8 @@ function renderHolidayForm() {
     const inputs = el.querySelectorAll('.hd-holiday-row input[data-field="date"]');
     if (inputs.length) inputs[inputs.length - 1].focus();
   };
-  const presetBtn = document.getElementById("hdfPreset");
-  if (presetBtn) presetBtn.onclick = () => {
-    const existing = new Set(list.map(h => h.date));
-    let added = 0;
-    HOLIDAY_PRESETS[y].forEach(([date, name]) => {
-      if (!existing.has(date)) { list.push({ id: uid(), name, date }); added++; }
-    });
-    list.sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
-    renderHolidayForm();
-    alert(added ? `${added}건을 추가했습니다. 확인 후 저장을 눌러주세요.` : "이미 모두 등록되어 있습니다.");
-  };
+  const importBtn = document.getElementById("hdfImportMain");
+  if (importBtn) importBtn.onclick = () => hdImportMainHolidays(y, list, importBtn);
   el.querySelectorAll(".hd-holiday-row input").forEach(inp => {
     inp.oninput = () => { list[+inp.dataset.idx][inp.dataset.field] = inp.value; };
     inp.onchange = inp.oninput;
@@ -831,6 +805,35 @@ function renderHolidayForm() {
   el.querySelectorAll("[data-del]").forEach(btn => {
     btn.onclick = () => { list.splice(+btn.dataset.del, 1); renderHolidayForm(); };
   });
+}
+
+// 업무관리(index.html, ns 없음)에 등록된 해당 연도 휴일을 불러와 없는 날짜만 추가합니다.
+// "?ns=" 를 직접 붙여 withNs 가 biz 를 덧붙이지 않도록 합니다. (서버는 빈 ns → 기본 키 사용)
+async function hdImportMainHolidays(y, list, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "불러오는 중...";
+  try {
+    const data = await apiFetchJson("/api/holidays?ns=");
+    const src = (data && data.holidays && Array.isArray(data.holidays[y])) ? data.holidays[y] : [];
+    if (!src.length) { alert(`업무관리에 ${y}년 휴일이 등록되어 있지 않습니다.`); return; }
+    const existing = new Set(list.map(h => h.date));
+    let added = 0;
+    src.forEach(h => {
+      if (h && h.date && !existing.has(h.date)) {
+        list.push({ id: uid(), name: h.name || "", date: h.date });
+        existing.add(h.date);
+        added++;
+      }
+    });
+    list.sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
+    renderHolidayForm();
+    alert(added ? `업무관리 ${y}년 휴일 ${added}건을 추가했습니다. 확인 후 저장을 눌러주세요.` : "이미 모두 등록되어 있습니다.");
+  } catch (e) {
+    alert("업무관리 휴일을 불러오지 못했습니다.\n" + ((e && e.message) || e));
+  } finally {
+    if (document.body.contains(btn)) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 async function saveHolidaySettings() {
