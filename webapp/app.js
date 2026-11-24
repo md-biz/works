@@ -955,8 +955,8 @@ function applySort(rows) {
 }
 
 // ---------------- "내 업무만" 토글 ----------------
-// 로그인 사용자 이름(예: 기획2)이 업무담당자(기획·디자인·퍼블·개발·GA) 중 하나와 같으면 "내 업무"로 봅니다.
-const MY_TASK_KEYS = ["planner", "designer", "publisher", "developer", "ga"];
+// 로그인 사용자 이름(예: 기획2)이 업무담당자(기획·디자인·퍼블·개발·GA·PM) 중 하나와 같으면 "내 업무"로 봅니다.
+const MY_TASK_KEYS = ["planner", "designer", "publisher", "developer", "ga", "pmUser"];
 
 function myAssigneeName() {
   const u = window.WorksAuth && window.WorksAuth.user ? window.WorksAuth.user() : null;
@@ -984,7 +984,7 @@ function updateMyOnlyBtn() {
   btn.setAttribute("aria-pressed", state.myOnly ? "true" : "false");
   btn.textContent = state.myOnly ? "✓ 내 업무만" : "내 업무만";
   btn.title = name
-    ? `업무담당자(기획·디자인·퍼블·개발·GA)가 '${name}'인 업무만 봅니다. 다시 누르면 전체 목록`
+    ? `업무담당자(기획·디자인·퍼블·개발·GA·PM)가 '${name}'인 업무만 봅니다. 다시 누르면 전체 목록`
     : "로그인 이름이 담당자 코드(예: 기획2)와 같아야 내 업무를 찾을 수 있습니다";
 }
 
@@ -1542,7 +1542,7 @@ function renderDashboard() {
 // ---------- 담당자별 진행 중인 업무 건 수 ----------
 
 // 담당자 역할 ↔ 업무현황 시트의 담당자 열 매핑
-const ASSIGNEE_ROLE_KEYS = { 기획: "planner", 디자인: "designer", 퍼블: "publisher", GA: "ga" };
+const ASSIGNEE_ROLE_KEYS = { 기획: "planner", 디자인: "designer", 퍼블: "publisher", GA: "ga", PM: "pmUser" };
 
 function renderAssigneeWorkload(tasks) {
   const el = document.getElementById("dashAssigneeCard");
@@ -1664,7 +1664,7 @@ function openAssigneeSettings() {
     btn.textContent = "저장 중...";
     try {
       // 1) 이름이 바뀐 항목을 찾아, 이미 입력된 업무의 담당자 값도 함께 바꿔줍니다.
-      const roleToKey = { 기획: "planner", 디자인: "designer", 퍼블: "publisher", GA: "ga" };
+      const roleToKey = { 기획: "planner", 디자인: "designer", 퍼블: "publisher", GA: "ga", PM: "pmUser" };
       const renames = [];
       Object.keys(ASSIGNEE_OPTIONS).forEach(role => {
         const before = ASSIGNEE_OPTIONS[role];
@@ -2261,10 +2261,18 @@ async function handleCsvFile(e) {
 
   const headers = rows[0].map(h => (h || "").trim());
   // 헤더 이름 -> 컬럼 key 매핑 (양식 열이 일부 빠지거나 순서가 달라도 동작)
-  const labelToKey = {};
-  CSV_COLUMNS.forEach(c => { labelToKey[c.label] = c.key; });
+  // 같은 이름의 헤더(예: 담당자 "GA"/"PM" 과 업무투입 "GA"/"PM")는 나오는 순서대로 연결합니다.
+  const labelToKeys = {};
+  CSV_COLUMNS.forEach(c => { (labelToKeys[c.label] = labelToKeys[c.label] || []).push(c.key); });
+  const labelSeen = {};
   const colIndex = {};
-  headers.forEach((h, i) => { if (labelToKey[h]) colIndex[labelToKey[h]] = i; });
+  headers.forEach((h, i) => {
+    const keys = labelToKeys[h];
+    if (!keys) return;
+    const n = labelSeen[h] || 0;
+    labelSeen[h] = n + 1;
+    if (keys[n]) colIndex[keys[n]] = i;
+  });
 
   const mappedCount = Object.keys(colIndex).length;
   if (mappedCount === 0) {

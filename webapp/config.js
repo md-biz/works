@@ -40,7 +40,8 @@ const ASSIGNEE_OPTIONS = {
   기획: ["기획2", "기획3", "기획4"],
   디자인: ["디자인1", "디자인2", "디자인3"],
   퍼블: ["퍼블1", "퍼블2", "퍼블3"],
-  GA: ["GA1", "GA2"]
+  GA: ["GA1", "GA2"],
+  PM: ["PM1"]
 };
 
 // GA 담당 코드 — 담당자 설정에서 함께 관리하도록 같은 배열을 참조합니다.
@@ -72,6 +73,7 @@ const COLUMNS = [
   { key: "publisher", label: "퍼블", type: "select", options: ASSIGNEE_OPTIONS.퍼블, width: 76, group: "assignee" },
   { key: "developer", label: "개발", type: "text", width: 38, maxLength: 4, group: "assignee" },
   { key: "ga", label: "GA", type: "select", options: GA_OPTIONS, width: 60, group: "assignee" },
+  { key: "pmUser", label: "PM", type: "select", options: ASSIGNEE_OPTIONS.PM, width: 60, group: "assignee" },
   { key: "receivedDate", label: "접수일", type: "datepick", width: 70, group: "schedule" },
   { key: "startDate", label: "시작일", type: "datepick", width: 70, group: "schedule" },
   { key: "dueDate", label: "완료예정", type: "datepick", width: 70, group: "schedule" },
@@ -95,7 +97,7 @@ function emptyTask() {
     ticket: "", deploy: "", major: "", minor: "", kind: "", priority: "",
     title: "", detail: "",
     reqTeam: "", reqPerson: "", pm: "",
-    planner: "", designer: "", publisher: "", developer: "", ga: "",
+    planner: "", designer: "", publisher: "", developer: "", ga: "", pmUser: "",
     receivedDate: "", startDate: "", dueDate: "", doneDate: "",
     status: "", reviewed: "",
     hPlanner: "", hDesigner: "", hPublisher: "", hGa: "", hPm: "",

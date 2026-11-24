@@ -594,7 +594,7 @@ tbody input:focus, tbody select:focus, tbody textarea:focus {
 .assignee-form {
   display: flex;
   gap: 12px;
-  flex-wrap: nowrap;   /* 기획·디자인·퍼블·GA 4열을 한 줄로 */
+  flex-wrap: nowrap;   /* 기획·디자인·퍼블·GA·PM 5열을 한 줄로 */
 }
 .assignee-col {
   flex: 1 1 0;
@@ -984,6 +984,7 @@ tbody select.value-missing {
 .role-design { --rc-bg: #f1e8fb; --rc-bd: #8e44d6; --rc-fg: #6a2db0; }
 .role-pub    { --rc-bg: #e3f4e8; --rc-bd: #2e9e55; --rc-fg: #1c7339; }
 .role-ga     { --rc-bg: #fff0de; --rc-bd: #f08c1a; --rc-fg: #a85800; }
+.role-pm     { --rc-bg: #dff5f3; --rc-bd: #13a39a; --rc-fg: #0b6f69; }
 .role-etc    { --rc-bg: #eeeeef; --rc-bd: #8a8a8e; --rc-fg: #555555; }
 
 .hd-layout {
