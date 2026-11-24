@@ -2023,7 +2023,7 @@ function xlEstimateLines(text, width) {
 
 // 순수 함수: 업무 목록 → 엑셀 통합문서 정의 (XlsxLite.build 에 전달)
 function buildTaskWorkbookDef(tasks, opts) {
-  const { year, month, title, sheetName, targetMM = {}, holidayCount = 0 } = opts;
+  const { year, month, title, sheetName, targetMM = {}, holidayCount = 0, leaveHours = {} } = opts;
   const FONT = "맑은 고딕";
   const GRID = "FF999999";
   const thin = ["thin", GRID];
@@ -2038,7 +2038,8 @@ function buildTaskWorkbookDef(tasks, opts) {
 
   const FIRST = 7;
   const LAST = FIRST + tasks.length - 1;
-  const H_ROW = LAST + 1, MM_ROW = LAST + 2, RATE_ROW = LAST + 3;
+  // 하단: 직무별 투입 H / 공통업무 H(담당자 휴가 시간) / 직무별 투입 M/M / 직무별 투입률
+  const H_ROW = LAST + 1, LEAVE_ROW = LAST + 2, MM_ROW = LAST + 3, RATE_ROW = LAST + 4;
   const rng = (col) => `${col}${FIRST}:${col}${LAST}`;
   const pad = (n) => String(n).padStart(2, "0");
   const lastDay = new Date(year, month, 0).getDate();
@@ -2109,9 +2110,9 @@ function buildTaskWorkbookDef(tasks, opts) {
     rowHeights[r] = Math.min(180, Math.max(18, lines * 13.5 + 5));
   });
 
-  // ---- 하단 합계: 직무별 투입 H / M/M / 투입률 ----
+  // ---- 하단 합계: 직무별 투입 H / 공통업무 H / M/M / 투입률 ----
   const foot = (o) => st(Object.assign({ fill: "FFFFFFCC", border: box, align: { h: "center", v: "center" } }, o));
-  const footRows = [[H_ROW, "직무별 투입 H"], [MM_ROW, "직무별 투입 M/M"], [RATE_ROW, "직무별 투입률"]];
+  const footRows = [[H_ROW, "직무별 투입 H"], [LEAVE_ROW, "공통업무 H"], [MM_ROW, "직무별 투입 M/M"], [RATE_ROW, "직무별 투입률"]];
   footRows.forEach(([r, label]) => {
     XL_COLS.forEach(([col]) => {
       const addr = col + r;
@@ -2130,16 +2131,24 @@ function buildTaskWorkbookDef(tasks, opts) {
     if (idx >= 0) cells[idx] = Object.assign({}, cells[idx], { f, v: null, s: style || cells[idx].s });
   };
   const red = (fmt, border) => foot({ font: { name: FONT, sz: 9, b: true, color: "FFFF0000" }, align: { h: "right", v: "center" }, numFmt: fmt, border });
+  // 공통업무 H: 휴일관리에 등록된 담당자 휴가 시간을 직무(S~W)별로 합산
+  ["S", "T", "U", "V", "W"].forEach((col, i) => {
+    const h = num(leaveHours[XL_ROLE_KEYS[i]]);
+    const idx = cells.findIndex(c => XlsxLite.ref(c.r, c.c) === `${col}${LEAVE_ROW}`);
+    if (idx >= 0) cells[idx] = Object.assign({}, cells[idx], { v: h, s: foot({ numFmt: "0.0" }) });
+  });
+  setF(`X${LEAVE_ROW}`, `SUM(S${LEAVE_ROW}:W${LEAVE_ROW})`, foot({ numFmt: "0.0" }));
   ["S", "T", "U", "V", "W", "X"].forEach(col => {
     setF(`${col}${H_ROW}`, `SUM(${rng(col)})`, foot({ numFmt: "0.0" }));
     if (col !== "X") {
-      setF(`${col}${MM_ROW}`, `SUMIFS(${rng(col)},${rng("D")},"<>SI")/${MM_HOURS}`, red("0.00_ ", box));
+      // M/M = (직무별 투입 H[SI 제외] + 공통업무 H) ÷ MM 기준시간
+      setF(`${col}${MM_ROW}`, `(SUMIFS(${rng(col)},${rng("D")},"<>SI")+${col}${LEAVE_ROW})/${MM_HOURS}`, red("0.00_ ", box));
       setF(`${col}${RATE_ROW}`, `IFERROR(${col}${MM_ROW}/${col}2,0)`,
         foot({ numFmt: "0.00%", border: { l: thin, r: thin, t: thin, b: ["medium", "FF000000"] } }));
     }
   });
   setF(`Y${H_ROW}`, `SUM(${rng("Y")})`, foot({ align: { h: "right", v: "center" }, numFmt: "0.00" }));
-  setF(`Y${MM_ROW}`, `Y${H_ROW}`, red("0.00_ ", box));
+  setF(`Y${MM_ROW}`, `SUM(S${MM_ROW}:W${MM_ROW})`, red("0.00_ ", box));
   setF(`Y${RATE_ROW}`, `IFERROR(Y${MM_ROW}/X2,0)`, foot({ numFmt: "0.00%", border: { l: thin, r: thin, t: thin, b: ["medium", "FF000000"] } }));
 
   // ---- 조건부 서식 (업무현황 양식과 동일한 색) ----
@@ -2202,7 +2211,9 @@ function exportExcel() {
     title: `${biz ? "디지털사업 " : ""}업무현황_${String(year).slice(2)}년 ${month}월`,
     sheetName: `업무현황_${month}월`,
     targetMM: (state.settings && state.settings.targetMM) || DEFAULT_TARGET_MM,
-    holidayCount
+    holidayCount,
+    // 공통업무 H: 요약 탭과 같은 기준(해당 월 담당자 휴가 시간, 직무별 합계)
+    leaveHours: typeof leaveHoursByRoleForMonth === "function" ? leaveHoursByRoleForMonth(state.currentMonth) : {}
   });
   const blob = XlsxLite.build(def);
   const now = new Date();
