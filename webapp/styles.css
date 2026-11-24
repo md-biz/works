@@ -594,7 +594,7 @@ tbody input:focus, tbody select:focus, tbody textarea:focus {
 .assignee-form {
   display: flex;
   gap: 12px;
-  flex-wrap: nowrap;   /* 기획·디자인·퍼블·GA·PM 5열을 한 줄로 */
+  flex-wrap: nowrap;   /* PM·기획·디자인·퍼블·GA 5열을 한 줄로 */
 }
 .assignee-col {
   flex: 1 1 0;

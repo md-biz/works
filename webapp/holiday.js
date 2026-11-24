@@ -11,13 +11,13 @@ const LEAVE_TYPES = {
   검진: { hours: 8, days: 1 }
 };
 
-// 담당자 그룹별 색상 (기획 푸른색 · 디자인 보라색 · 퍼블 녹색 · GA 주황색 · PM 청록색)
+// 담당자 그룹별 색상 (PM 청록색 · 기획 푸른색 · 디자인 보라색 · 퍼블 녹색 · GA 주황색)
 const LEAVE_ROLE_COLORS = {
+  PM: "role-pm",
   기획: "role-plan",
   디자인: "role-design",
   퍼블: "role-pub",
-  GA: "role-ga",
-  PM: "role-pm"
+  GA: "role-ga"
 };
 
 const holidayState = {
