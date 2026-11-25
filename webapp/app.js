@@ -2225,7 +2225,6 @@ function buildTaskWorkbookDef(tasks, opts) {
   // ---- 조건부 서식 (업무현황 양식과 동일한 색) ----
   const cf = [
     { sqref: `Q${FIRST}:Q${LAST}`, rules: [
-      { type: "cellIs", formula: '"완료"', dxf: { fill: "FFFFC6C6", color: "FF000000" } },
       { type: "cellIs", formula: '"취소"', dxf: { fill: "FFB6D7A8", color: "FF000000" } },
       { type: "cellIs", formula: '"진행"', dxf: { fill: "FFC5DAFF", color: "FF000000" } }
     ] },
@@ -2307,7 +2306,7 @@ function buildSummarySheetDef(o) {
     r++;
   };
 
-  // ---- 1. 업무별 투입 MM (기준 / 투입 / 휴가 / 투입률) ----
+  // ---- 1. 업무별 투입 MM (기준 / 투입 / 투입률) — 휴가는 투입 MM에 포함되어 별도 행 없음 ----
   put(r, 2, `■ ${month}월 업무별 투입 MM`, sectionTitle); rowHeights[r] = 21; r++;
   headerRow(["구분", null, ...ROLES_XL, "계"], true);
   const TOT = 4 + ROLES_XL.length; // 계 열 번호
@@ -2323,8 +2322,6 @@ function buildSummarySheetDef(o) {
   mmLine("target", "기준 MM", (L) => `${SH}${L}2`, numCell(MM2Z), sumRow);
   mmLine("mm", "투입 MM", (L) => `${SH}${L}${MM_ROW}`,
     st({ border: box, align: { h: "center", v: "center" }, numFmt: MM2Z, font: { name: FONT, sz: 9, b: true } }), sumRow);
-  mmLine("leave", "ㄴ 휴가", (L) => `${SH}${L}${LEAVE_ROW}/${MM_HOURS}`,
-    st({ border: box, align: { h: "center", v: "center" }, numFmt: '0.00;-0.00;"-";@' }), sumRow);
   mmLine("rate", "투입률", (L, c) => `IFERROR(${col(c)}${mmRows.mm}/${col(c)}${mmRows.target},0)`,
     foot({ font: { name: FONT, sz: 9, b: true }, numFmt: PCT }),
     () => `IFERROR(${col(TOT)}${mmRows.mm}/${col(TOT)}${mmRows.target},0)`, footLabel);
@@ -2362,9 +2359,10 @@ function buildSummarySheetDef(o) {
     g.minors.forEach(minor => {
       put(r, 2, g.major, labelC);
       put(r, 3, minor, label);
-      ROLE_COLS.forEach((L, i) => put(r, 4 + i, null, numCell(MM2),
+      ROLE_COLS.forEach((L, i) => put(r, 4 + i, null, numCell(MM2Z),
         { f: `SUMIFS(${rngOf(L)},${rngOf("D")},$B$${gFirst},${rngOf("E")},$C${r})/${MM_HOURS}` }));
-      put(r, TOT, null, numCell(MM2), { f: sumRow(r) });
+      // 계 열: 연한 하늘색
+      put(r, TOT, null, st({ border: box, fill: "FFEEF5FB", align: { h: "center", v: "center" }, numFmt: MM2Z }), { f: sumRow(r) });
       rowHeights[r] = 18; r++;
     });
     // 소계
