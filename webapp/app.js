@@ -2651,7 +2651,12 @@ function reportLine(t, dateStr) {
 
   const date = dateStr ? `(${dateStr})` : "";
   const note = (t.note || "").trim() ? `_${(t.note || "").trim()}` : "";
-  return `${head}${t.title}${date}${note}`;
+  return `${head}${reportTitle(t.title)}${date}${note}`;
+}
+
+// 주간보고용 업무명: 업무명 안의 [기업] · [소상공인] 표시는 빼고 보여줍니다. (원본 데이터는 그대로)
+function reportTitle(title) {
+  return String(title || "").replace(/\[\s*(기업|소상공인)\s*\]\s*/g, "").trim();
 }
 
 // 업무상세를 하위 항목으로 붙입니다 (줄 단위).
@@ -2718,15 +2723,19 @@ async function generateWeeklyReport() {
       })
       .map(x => x.t);
 
-    // 접수(검토 중)
+    // 접수(검토 중): 진행현황과 관계없이 접수일이 대상 기간(직전 목요일~오늘) 안에 있는 업무 (취소 제외)
     const receivedList = rest
-      .filter(t => t.status === "접수")
-      .sort((a, b) => (a.receivedDate || "").localeCompare(b.receivedDate || ""));
+      .filter(t => t.receivedDate && t.receivedDate >= startStr && t.receivedDate <= endStr)
+      .sort((a, b) => a.receivedDate.localeCompare(b.receivedDate));
 
     // 완료일을 특정할 수 없는 완료 건
     const needCheck = rest.filter(t => t.status === "완료" && !t.doneDate);
 
     const lines = [];
+
+    // 상단 요약: 반영(=완료) / 진행 / 접수 건수 — 아래 각 섹션 건수와 같음
+    lines.push(`반영 ${doneList.length}건 / 진행 ${progressList.length}건 / 접수 ${receivedList.length}건`);
+    lines.push("");
 
     pushSection(lines,
       `▧ 완료 ${doneList.length}건${deployCount ? `(배포 ${deployCount}건)` : ""}`,
