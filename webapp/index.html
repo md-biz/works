@@ -206,7 +206,7 @@
 
 <script src="config.js?v=20261125a"></script>
 <script src="xlsx.js?v=20261029b"></script>
-<script src="app.js?v=20261125f"></script>
+<script src="app.js?v=20261125p"></script>
 <script src="holiday.js?v=20261116b"></script>
 <style>
   /* 영역 접기/펼치기 버튼 */
@@ -460,9 +460,16 @@
   function wrapNameInputs(iName) {
     if (iName < 0) return;
     var cells = table.querySelectorAll("tbody td:nth-child(" + (iName + 1) + ")");
+    // 성능: 입력칸 폭(offsetWidth)을 읽지 않습니다. 칸 폭은 머리글 폭(min-width)과 CSS(width:100%)로 정해집니다.
+    // (행마다 폭을 읽으면 브라우저가 표 전체 배치를 그때마다 다시 계산해 수정 시 1초 이상 멈춤)
+    var todo = [];
     Array.prototype.forEach.call(cells, function (td) {
       var inp = td.querySelector('input:not([type]),input[type=text]');
       if (!inp || inp.dataset.wrap2) return;
+      todo.push({ inp: inp });
+    });
+    todo.forEach(function (item) {
+      var inp = item.inp;
       inp.dataset.wrap2 = "1";
       var ta = document.createElement("textarea");
       ta.className = "wrap2";
@@ -472,7 +479,6 @@
       ta.title = inp.value;
       ta.readOnly = inp.readOnly;
       ta.disabled = inp.disabled;
-      if (inp.offsetWidth > 0) ta.style.minWidth = inp.offsetWidth + "px"; // 원래 입력칸 폭 유지
       inp.style.display = "none";
       inp.parentNode.insertBefore(ta, inp);
       function sync(type) {

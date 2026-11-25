@@ -465,13 +465,14 @@ function recomputeHours(task) {
 
 async function init() {
   document.getElementById("apiModeLabel").textContent = API_BASE ? `Vercel API 연동 (${API_BASE})` : "로컬 데모 모드 (localStorage) — 아직 Vercel과 연결되지 않았습니다";
-  state.months = await loadMonths();
+  // 월 목록 · 담당자 · 분류는 서로 기다릴 필요가 없어 동시에 요청합니다. (차례로 요청하면 서버 왕복 시간이 그만큼 쌓임)
+  const [months, savedAssignees, savedCategories] = await Promise.all([loadMonths(), loadAssignees(), loadCategories()]);
+  state.months = months;
   if (state.months.length === 0) {
     const now = new Date();
     state.months = [`${now.getMonth() + 1}월`];
     await saveMonths(state.months);
   }
-  const savedAssignees = await loadAssignees();
   if (savedAssignees) {
     Object.keys(ASSIGNEE_OPTIONS).forEach(role => {
       if (Array.isArray(savedAssignees[role])) {
@@ -479,7 +480,7 @@ async function init() {
       }
     });
   }
-  applyCategories(await loadCategories());
+  applyCategories(savedCategories);
   // 휴일 관리 (holiday.js): 서버 응답을 기다리느라 화면 전체가 멈추지 않도록 따로 불러오고, 도착하면 다시 그립니다.
   if (typeof loadHolidayData === "function") {
     loadHolidayData().then(() => {
@@ -495,8 +496,10 @@ async function init() {
 
 async function switchMonth(month) {
   state.currentMonth = month;
-  state.tasks = await loadTasks(month);
-  state.settings = await loadSettings(month);
+  // 업무 목록과 기준 설정을 동시에 요청
+  const [tasks, settings] = await Promise.all([loadTasks(month), loadSettings(month)]);
+  state.tasks = tasks;
+  state.settings = settings;
   state.tasks.forEach(recomputeHours);
   renumber();
   renderAll();

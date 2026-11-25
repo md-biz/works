@@ -116,9 +116,9 @@ function readToken(req) {
 async function authenticate(req) {
   const token = readToken(req);
   if (!token) return null;
-  const session = await getClient().get(SESSION_PREFIX + token);
+  // 세션과 사용자 목록을 동시에 읽습니다. (차례로 읽으면 KV 왕복 시간이 두 번 쌓여 모든 API가 그만큼 느려짐)
+  const [session, users] = await Promise.all([getClient().get(SESSION_PREFIX + token), getUsers()]);
   if (!session || !session.email) return null;
-  const users = await getUsers();
   const user = users.find((u) => u.email === session.email);
   if (!user || user.active === false || (user.ver || 1) !== (session.ver || 1)) {
     await deleteSession(token);
