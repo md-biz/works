@@ -56,6 +56,8 @@ const MM_HOURS = 160;
 // 업무현황 시트 컬럼 정의 (표시 순서)
 // type: text | textarea | select | select-dependent | datepick | number | readonly | ticket
 const COLUMNS = [
+  // 진행현황은 맨 앞에 표시 (2026-11-25)
+  { key: "status", label: "진행현황", type: "select", options: OPTIONS.진행현황, width: 76, group: "meta" },
   { key: "no", label: "NO", type: "readonly", width: 36, group: "meta" },
   { key: "ticket", label: "티켓번호", type: "ticket", width: 64, group: "meta" },
   { key: "deploy", label: "배포", type: "select", options: OPTIONS.배포, width: 52, group: "meta" },
@@ -77,7 +79,6 @@ const COLUMNS = [
   { key: "startDate", label: "시작일", type: "datepick", width: 70, group: "schedule" },
   { key: "dueDate", label: "완료예정", type: "datepick", width: 70, group: "schedule" },
   { key: "doneDate", label: "완료일", type: "datepick", width: 70, group: "schedule" },
-  { key: "status", label: "진행현황", type: "select", options: OPTIONS.진행현황, width: 76, group: "schedule" },
   { key: "reviewed", label: "검수(U+)", type: "select", options: OPTIONS.검수여부, width: 66, group: "schedule" },
   { key: "hPlanner", label: "기획", type: "number", width: 34, group: "hours" },
   { key: "hDesigner", label: "디자인", type: "number", width: 34, group: "hours" },

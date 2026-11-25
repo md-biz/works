@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 240" preserveAspectRatio="xMaxYMax slice">
+  <defs>
+    <!-- 수채화 번짐 -->
+    <filter id="wc" x="-10%" y="-20%" width="120%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="3" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="12" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feGaussianBlur in="d" stdDeviation="1.2"/>
+    </filter>
+    <filter id="wcSoft" x="-20%" y="-40%" width="140%" height="180%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="8" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="24" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feGaussianBlur in="d" stdDeviation="6"/>
+    </filter>
+    <filter id="cloud" x="-20%" y="-30%" width="140%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" seed="21" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="16" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feGaussianBlur in="d" stdDeviation="1.4"/>
+    </filter>
+    <filter id="wcLine" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="5" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="paper" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="11" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.3  0 0 0 0 0.35  0 0 0 0 0.45  0 0 0 0.07 0"/>
+    </filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f8fe0"/>
+      <stop offset=".45" stop-color="#78b6ee"/>
+      <stop offset=".75" stop-color="#bfe0f8"/>
+      <stop offset="1" stop-color="#e6f4fc"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a74c2"/>
+      <stop offset=".45" stop-color="#3b97d0"/>
+      <stop offset="1" stop-color="#6cc8d8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 파란 하늘 -->
+  <rect width="1600" height="240" fill="url(#sky)"/>
+  <g filter="url(#wcSoft)" opacity=".55">
+    <ellipse cx="260" cy="20" rx="300" ry="46" fill="#2f7fd6"/>
+    <ellipse cx="900" cy="14" rx="340" ry="40" fill="#3a88dc"/>
+    <ellipse cx="1420" cy="24" rx="280" ry="44" fill="#2f7fd6"/>
+  </g>
+
+  <!-- 하얀 뭉게구름 -->
+  <g filter="url(#cloud)" transform="translate(0 24)">
+    <!-- 큰 구름 (오른쪽) -->
+    <g fill="#ffffff">
+      <ellipse cx="1180" cy="128" rx="190" ry="34"/>
+      <circle cx="1060" cy="112" r="34"/>
+      <circle cx="1110" cy="88" r="46"/>
+      <circle cx="1180" cy="66" r="58"/>
+      <circle cx="1250" cy="82" r="46"/>
+      <circle cx="1306" cy="104" r="36"/>
+    </g>
+    <g fill="#dbe9f6" opacity=".9">
+      <ellipse cx="1184" cy="142" rx="170" ry="14"/>
+    </g>
+    <!-- 중간 구름 -->
+    <g fill="#ffffff" opacity=".95">
+      <ellipse cx="640" cy="104" rx="120" ry="22"/>
+      <circle cx="590" cy="90" r="26"/><circle cx="640" cy="74" r="36"/><circle cx="694" cy="88" r="26"/>
+    </g>
+    <g fill="#dbe9f6" opacity=".85"><ellipse cx="642" cy="116" rx="104" ry="9"/></g>
+    <!-- 작은 구름들 -->
+    <g fill="#ffffff" opacity=".9">
+      <ellipse cx="120" cy="64" rx="80" ry="14"/><circle cx="140" cy="52" r="20"/><circle cx="100" cy="56" r="14"/>
+      <ellipse cx="1500" cy="44" rx="70" ry="13"/><circle cx="1520" cy="34" r="18"/>
+      <ellipse cx="880" cy="40" rx="50" ry="9"/><circle cx="892" cy="32" r="12"/>
+    </g>
+  </g>
+
+  <!-- 수평선 너머 섬 -->
+  <g filter="url(#wc)" opacity=".7">
+    <path d="M300 172 C 340 156, 400 152, 460 164 C 480 168, 500 170, 520 172 Z" fill="#7ea9c9"/>
+    <path d="M820 172 C 850 164, 890 162, 930 170 L 940 172 Z" fill="#8db4d1"/>
+  </g>
+
+  <!-- 바다 -->
+  <g filter="url(#wc)">
+    <rect x="-20" y="170" width="1640" height="80" fill="url(#sea)"/>
+    <path d="M-20 170 H1620 V176 H-20z" fill="#e9f6fd" opacity=".55"/>
+  </g>
+  <!-- 물결 붓터치 -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" filter="url(#wcLine)">
+    <g stroke-width="2" opacity=".65">
+      <path d="M40 190 q20 -6 40 0"/><path d="M180 200 q24 -6 48 0"/><path d="M360 186 q18 -5 36 0"/>
+      <path d="M520 204 q26 -7 52 0"/><path d="M700 192 q20 -6 40 0"/><path d="M880 208 q24 -6 48 0"/>
+      <path d="M1040 190 q20 -6 40 0"/><path d="M1180 202 q22 -6 44 0"/>
+    </g>
+    <g stroke-width="1.5" opacity=".45">
+      <path d="M110 214 q16 -4 32 0"/><path d="M290 222 q18 -5 36 0"/><path d="M460 216 q16 -4 32 0"/>
+      <path d="M620 226 q20 -5 40 0"/><path d="M790 218 q16 -4 32 0"/><path d="M960 228 q18 -5 36 0"/>
+      <path d="M1110 220 q16 -4 32 0"/>
+    </g>
+  </g>
+  <!-- 윤슬 -->
+  <g fill="#ffffff" opacity=".8">
+    <circle cx="620" cy="182" r="1.6"/><circle cx="660" cy="188" r="1.2"/><circle cx="700" cy="180" r="1.6"/>
+    <circle cx="1000" cy="184" r="1.4"/><circle cx="1060" cy="178" r="1.6"/><circle cx="240" cy="182" r="1.2"/>
+  </g>
+
+  <!-- 돛단배 -->
+  <g transform="translate(760 158)" filter="url(#wc)">
+    <path d="M0 18 H28 L22 24 H6 Z" fill="#f4f1ea"/>
+    <path d="M14 18 V-6 L26 16 Z" fill="#ffffff"/>
+    <path d="M12 18 V0 L4 16 Z" fill="#fde7c7"/>
+  </g>
+
+  <!-- 갈매기 -->
+  <g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity=".9" filter="url(#wcLine)">
+    <path d="M420 92 q7 -7 14 0 q7 -7 14 0"/>
+    <path d="M466 76 q5 -5 10 0 q5 -5 10 0"/>
+    <path d="M940 120 q5 -5 10 0 q5 -5 10 0"/>
+  </g>
+
+  <!-- 오른쪽 모래 언덕과 풀 -->
+  <g filter="url(#wc)">
+    <path d="M1300 240 C 1340 206, 1410 194, 1480 198 S 1580 212, 1620 216 V250 H1300z" fill="#f2e2bd"/>
+    <path d="M1360 240 C 1400 220, 1470 214, 1540 218 S 1600 226, 1620 228 V250 H1360z" fill="#e6cf9c" opacity=".7"/>
+  </g>
+  <g stroke="#7fae78" stroke-width="2" stroke-linecap="round" fill="none" opacity=".8" filter="url(#wcLine)">
+    <path d="M1338 222 q-2 -12 -8 -18"/><path d="M1342 222 q2 -14 8 -20"/><path d="M1346 222 q0 -10 2 -14"/>
+    <path d="M1560 214 q-2 -12 -8 -18"/><path d="M1564 214 q2 -14 8 -20"/>
+  </g>
+
+  <!-- 고양이: 모래 언덕에 앉아 바다를 보는 모습 -->
+  <g transform="translate(1460 134)">
+    <g filter="url(#wc)">
+      <ellipse cx="0" cy="68" rx="34" ry="6" fill="#c9b07e" opacity=".5"/>
+      <path d="M20 60 C 48 62, 56 40, 44 28" fill="none" stroke="#f0b27a" stroke-width="10" stroke-linecap="round" opacity=".95"/>
+      <path d="M-28 66 C -32 38, -18 16, 0 16 C 18 16, 32 38, 28 66 Z" fill="#fffaf3"/>
+      <path d="M-10 24 C 0 20, 10 20, 18 28 C 14 38, 2 40, -8 36 Z" fill="#f2b680" opacity=".9"/>
+      <path d="M12 44 C 20 42, 25 50, 26 58 C 18 60, 13 54, 12 44 Z" fill="#f2b680" opacity=".8"/>
+      <circle cx="0" cy="2" r="19" fill="#fffaf3"/>
+      <path d="M-2 -17 C 8 -18, 16 -11, 18 -3 C 10 -2, 2 -7, -2 -17 Z" fill="#f2b680" opacity=".9"/>
+      <path d="M-17 -4 L-16 -28 L-3 -15 Z" fill="#fffaf3"/>
+      <path d="M17 -4 L16 -28 L3 -15 Z" fill="#f2b680"/>
+      <path d="M-14 -9 L-13.5 -22 L-7 -15 Z" fill="#f4c2c2" opacity=".85"/>
+    </g>
+    <g fill="none" stroke="#7a6656" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".75" filter="url(#wcLine)">
+      <path d="M-28 66 C -32 38, -18 16, -6 16"/><path d="M6 16 C 18 16, 32 38, 28 66"/>
+      <path d="M-17 -4 L-16 -28 L-3 -15"/><path d="M17 -4 L16 -28 L3 -15"/>
+      <path d="M-9 -15 A 19 19 0 1 0 9 -15"/>
+      <path d="M20 60 C 48 62, 56 40, 44 28"/>
+      <path d="M-14 66 q 6 4 12 0 M2 66 q 6 4 12 0"/>
+    </g>
+  </g>
+
+  <!-- 종이 질감 -->
+  <rect width="1600" height="240" filter="url(#paper)"/>
+</svg>

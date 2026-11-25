@@ -5,11 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>업무관리</title>
 <!-- 로그인 (모든 API 요청보다 먼저 불러와야 합니다) -->
-<script src="auth.js?v=20261113a"></script>
+<script src="auth.js?v=20261125v"></script>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="theme-color" content="#7c3aed" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" />
-<link rel="stylesheet" href="styles.css?v=20261125a" />
+<link rel="stylesheet" href="styles.css?v=20261125x" />
 <style>
   /* ---------- 상단 메뉴 (업무관리 / 배포 관리 공통) ---------- */
   .global-nav {
@@ -28,9 +32,9 @@
   .global-nav a.active { color: #ffffff; font-weight: 600; }
   .global-nav a.active::after {
     content: ""; position: absolute; left: 14px; right: 14px; bottom: 0;
-    height: 2px; border-radius: 2px; background: #2997ff;
+    height: 2px; border-radius: 2px; background: #ffffff;
   }
-  .global-nav a:focus-visible { outline: 2px solid #0071e3; outline-offset: -2px; }
+  .global-nav a:focus-visible { outline: 2px solid #6d28d9; outline-offset: -2px; }
   .global-nav .ext { margin-left: 4px; font-size: 10px; opacity: 0.6; }
   .global-nav a:hover .ext { opacity: 1; }
   @media (max-width: 640px) { .global-nav { padding: 0 8px; } }
@@ -48,7 +52,7 @@
 
 <header class="app-header">
   <div class="brand" id="brandHome" title="첫 화면(대시보드)으로 이동">
-    <span class="brand-mark">▤</span>
+    <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="32" height="32"><rect x="1" y="1" width="14" height="14" rx="4" fill="#8b5cf6"/><circle cx="24" cy="8" r="7" fill="#c4b5fd"/><path d="M1 31V17a14 14 0 0 1 14 14z" fill="#d946ef"/><path d="M24 17l7 7-7 7-7-7z" fill="#ffffff"/></svg></span>
     <div class="brand-text">
       <h1>업무관리</h1>
     </div>
@@ -71,8 +75,7 @@
   </div>
   <div class="toolbar-right">
     <div id="sheetToolsGroup" class="sheet-tools" style="display:none">
-      <select id="statusFilter" class="status-filter" title="진행현황으로 걸러보기"></select>
-      <button id="btnMyOnly" type="button" class="status-filter my-only-btn" aria-pressed="false">내 업무만</button>
+      <select id="statusFilter" class="status-filter" title="진행현황으로 걸러보기" hidden></select>
       <input id="searchInput" type="text" placeholder="업무명 · 업무상세 · 티켓번호 검색" />
       <span id="rowCount" class="row-count"></span>
       <button id="btnAddRow" class="btn btn-primary">+ 행 추가</button>
@@ -88,6 +91,22 @@
 
 <main>
   <section id="dashboardPanel" class="panel">
+    <div class="dash-hello">
+      <p id="dashToday" class="dash-today"></p>
+      <h2 class="dash-greet"><span id="dashUserName">사용자</span>님 안녕하세요.</h2>
+    </div>
+    <div id="dashHero" class="dash-hero" role="button" tabindex="0" data-count="0">
+      <!-- 배너 사진: Unsplash 무료 사진 (Jenna Bash, Unsplash License). 불러오지 못하면 기본 그림(dash-hero.svg)으로 대체 -->
+      <img src="https://images.unsplash.com/photo-1592500626473-e988dbea2184?fm=jpg&q=75&w=2400&auto=format&fit=crop"
+           alt="" aria-hidden="true" loading="eager" decoding="async"
+           onerror="this.onerror=null;this.src='dash-hero.svg?v=20261125w';var c=this.parentNode.querySelector('.dash-hero-credit');if(c)c.hidden=true;" />
+      <div class="dash-hero-text">
+        <span class="dash-hero-tag">● 내 담당 업무</span>
+        <p id="dashHeroMsg">업무현황을 확인하세요.</p>
+        <span class="dash-hero-link">바로가기 →</span>
+      </div>
+      <span class="dash-hero-credit">Photo · Jenna Bash / Unsplash</span>
+    </div>
     <div class="dash-header">
       <h2 id="dashTitle">대시보드</h2>
       <button id="btnDashRefresh" class="btn btn-ghost">새로고침</button>
@@ -122,6 +141,10 @@
   </section>
 
   <section id="sheetPanel" class="panel" style="display:none">
+    <div class="status-bar">
+      <div id="statusChips" class="status-chips" role="group" aria-label="진행현황별 건수"></div>
+      <button id="btnMyOnly" type="button" class="my-only-btn" aria-pressed="false">내 업무만</button>
+    </div>
     <div class="table-scroll">
       <table id="sheetTable">
         <thead>
@@ -204,10 +227,10 @@
   </div>
 </div>
 
-<script src="config.js?v=20261125a"></script>
+<script src="config.js?v=20261125v"></script>
 <script src="xlsx.js?v=20261029b"></script>
-<script src="app.js?v=20261125q"></script>
-<script src="holiday.js?v=20261116b"></script>
+<script src="app.js?v=20261125v"></script>
+<script src="holiday.js?v=20261125s"></script>
 <style>
   /* 영역 접기/펼치기 버튼 */
   #sheetTable thead th.grp-foldable { white-space: nowrap; }
@@ -217,8 +240,8 @@
     border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 4px; background: #fff;
     font-size: 10px; line-height: 1; color: #333; cursor: pointer;
   }
-  .grp-toggle:hover { background: #f0f4ff; border-color: #0071e3; color: #0071e3; }
-  .grp-toggle:focus-visible { outline: 2px solid #0071e3; outline-offset: 1px; }
+  .grp-toggle:hover { background: #f5f0ff; border-color: #6d28d9; color: #6d28d9; }
+  .grp-toggle:focus-visible { outline: 2px solid #6d28d9; outline-offset: 1px; }
   #sheetTable thead th.grp-collapsed { padding-left: 2px; padding-right: 2px; }
   #sheetTable thead th.grp-collapsed .grp-label { display: none; }
   #sheetTable thead th.grp-collapsed .grp-toggle { margin-left: 0; }
@@ -233,9 +256,30 @@
     background: rgba(0, 0, 0, 0.18); color: #fff; font-size: 12px; line-height: 1; cursor: pointer;
   }
   .search-clear:hover { background: rgba(0, 0, 0, 0.45); }
-  .search-clear:focus-visible { outline: 2px solid #0071e3; outline-offset: 1px; }
+  .search-clear:focus-visible { outline: 2px solid #6d28d9; outline-offset: 1px; }
   .search-wrap.has-value .search-clear { display: inline-flex; }
 </style>
+<script>
+/* ---------- 대시보드 인사말: "로그인 사용자명님 안녕하세요." + 오늘 날짜 ---------- */
+(function () {
+  var nameEl = document.getElementById("dashUserName");
+  var dateEl = document.getElementById("dashToday");
+  if (!nameEl) return;
+  var DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  function paintDate() {
+    var d = new Date();
+    if (dateEl) dateEl.textContent = d.getFullYear() + "년 " + (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW[d.getDay()] + "요일";
+  }
+  function paintName() {
+    var u = window.WorksAuth && window.WorksAuth.user ? window.WorksAuth.user() : null;
+    var name = u ? (u.name || String(u.email || "").split("@")[0]) : "";
+    if (name && nameEl.textContent !== name) nameEl.textContent = name;
+  }
+  paintDate(); paintName();
+  // 로그인 완료·사용자 변경 시점을 따로 알려주지 않으므로 가볍게 주기 확인
+  setInterval(function () { paintName(); paintDate(); }, 1000);
+})();
+</script>
 <script>
 /* ---------- 검색어 삭제 버튼: 누르면 검색어를 지우고 전체 리스트로 복원 ---------- */
 (function () {
@@ -348,6 +392,25 @@
       ticketW = leaves[iTicket].th.offsetWidth; // 원래 티켓번호 폭
     }
     var css = "";
+    var iDetail = findCol(leaves, "업무상세");
+
+    // 0) 표 너비: 브라우저 너비에 맞춰 꽉 차게(최소 1280px), 늘어나는 공간은 업무명·업무상세가 나눠 가짐
+    //    나머지 왼쪽 열은 선언된 폭으로 고정 (요청팀 오른쪽 열은 아래 2)에서 티켓번호 폭으로 고정)
+    leaves.forEach(function (o) { if (o) o.th.className = o.th.className.replace(/\bfitcol\d+\b/g, "").trim(); });
+    css += "#sheetTable{width:100%;min-width:1280px;}";
+    var lastFixed = iTeam >= 0 ? iTeam : g.ncols - 1;
+    for (var k = 0; k <= lastFixed; k++) {
+      if (!leaves[k] || k === iName || k === iDetail) continue;
+      var mw = parseInt(leaves[k].th.style.minWidth, 10);
+      if (!mw) continue;
+      leaves[k].th.classList.add("fitcol" + (k + 1));
+      css += "#sheetTable thead th.fitcol" + (k + 1) + ",#sheetTable tbody td:nth-child(" + (k + 1) + ")" +
+        "{width:" + mw + "px;}";
+    }
+    [iName, iDetail].forEach(function (k) {
+      if (k < 0 || !leaves[k]) return;
+      css += "#sheetTable tbody td:nth-child(" + (k + 1) + "){width:auto;}";
+    });
 
     // 1) 업무명 두 줄
     if (iName >= 0) {
@@ -358,7 +421,7 @@
         td + " textarea.wrap2{display:block;width:100%;box-sizing:border-box;resize:none;overflow:hidden;" +
         "font:inherit;color:inherit;background:transparent;border:0;padding:2px 4px;line-height:1.35;" +
         "height:calc(1.35em * 2 + 4px);white-space:normal;word-break:keep-all;overflow-wrap:anywhere;}" +
-        td + " textarea.wrap2:focus{outline:2px solid #0071e3;outline-offset:-2px;background:#fff;}";
+        td + " textarea.wrap2:focus{outline:2px solid #6d28d9;outline-offset:-2px;background:#fff;}";
     }
 
     // 2) 요청팀 우측 컬럼 폭 = 티켓번호 폭

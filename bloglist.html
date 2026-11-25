@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>블로그 게시 관리</title>
 <!-- 로그인 (모든 API 요청보다 먼저 불러와야 합니다) -->
-<script src="webapp/auth.js?v=20261113a"></script>
+<script src="webapp/auth.js?v=20261125v"></script>
+<link rel="icon" type="image/svg+xml" href="webapp/favicon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="webapp/favicon-32.png" />
+<link rel="apple-touch-icon" href="webapp/apple-touch-icon.png" />
+<meta name="theme-color" content="#7c3aed" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" />
@@ -25,9 +29,9 @@
 <style>
   /* 2026 업무관리(webapp) · 배포 관리 스타일과 동일한 토큰 — DESIGN-apple.md 기준 */
   :root {
-    --primary: #0066cc;
-    --primary-focus: #0071e3;
-    --primary-on-dark: #2997ff;
+    --primary: #7c3aed;
+    --primary-focus: #6d28d9;
+    --primary-on-dark: #f472b6;
     --ink: #1d1d1f;
     --body-on-dark: #ffffff;
     --body-muted: #cccccc;
@@ -107,7 +111,7 @@
     font-size: 14px; font-weight: 400; letter-spacing: -0.01em; color: var(--ink-muted-80);
     cursor: default;
   }
-  .tab-btn.active { background: rgba(0, 102, 204, 0.1); color: var(--primary); font-weight: 600; }
+  .tab-btn.active { background: rgba(124, 58, 237, 0.1); color: var(--primary); font-weight: 600; }
 
   #searchInput {
     border: 1px solid rgba(0, 0, 0, 0.08); border-radius: var(--r-pill);
@@ -118,7 +122,7 @@
     display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 6px 0 14px;
     border: 1px solid rgba(0, 0, 0, 0.08); border-radius: var(--r-pill); background: var(--canvas);
   }
-  .date-range.active { border-color: var(--primary); background: rgba(0, 102, 204, 0.04); }
+  .date-range.active { border-color: var(--primary); background: rgba(124, 58, 237, 0.04); }
   .date-range-label { font-size: 12px; font-weight: 600; color: var(--ink-muted-80); white-space: nowrap; }
   .date-range input.df {
     border: none; background: transparent; font-family: var(--font-mono); font-size: 13px;
@@ -192,9 +196,9 @@
   }
   tbody tr { background: var(--canvas); }
   tbody tr:hover { background: var(--surface-pearl); }
-  tbody tr.selected { background: rgba(0, 102, 204, 0.06); }
+  tbody tr.selected { background: rgba(124, 58, 237, 0.06); }
   tbody tr.fresh { animation: fresh 1.6s ease; }
-  @keyframes fresh { from { background: rgba(0, 102, 204, 0.14); } }
+  @keyframes fresh { from { background: rgba(124, 58, 237, 0.14); } }
   td.sticky-col { position: sticky; left: 0; z-index: 1; background: inherit; text-align: center; padding-top: 8px; }
   .empty { padding: 48px 12px; text-align: center; color: var(--ink-muted-48); font-size: 13px; border-right: none; }
   input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--primary); cursor: pointer; }
@@ -224,7 +228,7 @@
   tbody select.ed:hover { background-color: #dcdce1; border-color: transparent; }
   tbody select.ed:focus { background-color: #dcdce1; border-color: var(--primary-focus); }
   tbody select.ed option { background: var(--canvas); color: var(--ink); }
-  tbody .ed.saving { border-color: rgba(0, 102, 204, 0.35); }
+  tbody .ed.saving { border-color: rgba(124, 58, 237, 0.35); }
   tbody .ed.saved { border-color: rgba(36, 138, 61, 0.5); }
   tbody .ed.failed { border-color: var(--danger); }
 
@@ -237,7 +241,7 @@
     width: 22px; height: 22px; margin-left: 1px; padding: 0; border: none; border-radius: var(--r-pill);
     background: transparent; color: var(--ink-muted-48); cursor: pointer;
   }
-  .cal-btn:hover { background: rgba(0, 102, 204, 0.1); color: var(--primary); }
+  .cal-btn:hover { background: rgba(124, 58, 237, 0.1); color: var(--primary); }
   .cal-btn:active { transform: scale(0.95); }
   .cal-btn svg { width: 13px; height: 13px; display: block; }
   /* 달력 팝업용 네이티브 입력 — 화면에는 보이지 않음 */
@@ -260,7 +264,7 @@
     width: 20px; height: 20px; border-radius: var(--r-pill); color: var(--primary);
     text-decoration: none; font-size: 12px;
   }
-  .ticket-link:hover { background: rgba(0, 102, 204, 0.12); }
+  .ticket-link:hover { background: rgba(124, 58, 237, 0.12); }
   .ticket-link.disabled { color: var(--ink-muted-48); pointer-events: none; opacity: .5; }
 
   /* ---------- 상단 메뉴 (2026 업무관리 / 배포 관리 공통) ---------- */
@@ -280,9 +284,9 @@
   .global-nav a.active { color: #ffffff; font-weight: 600; }
   .global-nav a.active::after {
     content: ""; position: absolute; left: 14px; right: 14px; bottom: 0;
-    height: 2px; border-radius: 2px; background: #2997ff;
+    height: 2px; border-radius: 2px; background: #f472b6;
   }
-  .global-nav a:focus-visible { outline: 2px solid #0071e3; outline-offset: -2px; }
+  .global-nav a:focus-visible { outline: 2px solid #6d28d9; outline-offset: -2px; }
   @media (max-width: 640px) { .global-nav { padding: 0 8px; } }
 
   .global-nav a .ext { font-size: 10px; margin-left: 4px; opacity: .7; }
@@ -349,7 +353,7 @@
     flex: 0 0 auto; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-pill);
     background: transparent; color: var(--ink-muted-48); cursor: pointer; font-size: 12px;
   }
-  .url-edit:hover { background: rgba(0, 102, 204, 0.1); color: var(--primary); }
+  .url-edit:hover { background: rgba(124, 58, 237, 0.1); color: var(--primary); }
   .url-edit:active { transform: scale(0.95); }
 
   /* 선택안함 상태 드롭다운 */
@@ -375,8 +379,8 @@
   tbody select.ed.plain:focus { background-color: var(--canvas); border-color: var(--primary-focus); }
 
   /* 진행상태 — 업무관리 styles.css 의 진행현황별 행 배경과 동일 */
-  tbody tr.row-progress > td { background: #e3f2fd; }
-  tbody tr.row-progress:hover > td { background: #d3e9fa; }
+  tbody tr.row-progress > td { background: #f3eefe; }
+  tbody tr.row-progress:hover > td { background: #e9e0fd; }
   tbody tr.row-done > td,
   tbody tr.row-closed > td { background: #ebebed; }
   tbody tr.row-done:hover > td,
@@ -395,7 +399,7 @@
   .st-closed   { color: #b5482d !important; }
   tbody select.ed.status-sel.st-none     { background-color: var(--canvas-parchment); }
   tbody select.ed.status-sel.st-recv     { background-color: #e8e8ed; }
-  tbody select.ed.status-sel.st-progress { background-color: rgba(0, 102, 204, 0.12); }
+  tbody select.ed.status-sel.st-progress { background-color: rgba(124, 58, 237, 0.12); }
   tbody select.ed.status-sel.st-done     { background-color: #dcdce1; }
   tbody select.ed.status-sel.st-closed   { background-color: rgba(181, 72, 45, 0.1); }
   tbody tr.row-done select.ed.status-sel.st-done { color: #1d1d1f !important; }
@@ -435,6 +439,8 @@
   .modal-body .warn { color: #b25000; font-size: 13px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px 20px; }
 </style>
+<!-- 2026-11-25 리디자인 공통 테마 (업무관리와 같은 컬러·컴포넌트) -->
+<link rel="stylesheet" href="webapp/theme.css?v=20261125v" />
 </head>
 <body>
 <nav class="global-nav" aria-label="서비스 메뉴">
@@ -446,7 +452,7 @@
 
 <header class="app-header">
   <div class="brand" id="brandHome" title="맨 위로">
-    <span class="brand-mark">▤</span>
+    <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="32" height="32"><rect x="1" y="1" width="14" height="14" rx="4" fill="#8b5cf6"/><circle cx="24" cy="8" r="7" fill="#c4b5fd"/><path d="M1 31V17a14 14 0 0 1 14 14z" fill="#d946ef"/><path d="M24 17l7 7-7 7-7-7z" fill="#ffffff"/></svg></span>
     <div class="brand-text"><h1>블로그 게시 관리</h1></div>
   </div>
   <div class="api-status">
@@ -526,7 +532,7 @@
   const LOCAL_KEY = "bloglist-preview";
   const API = (window.API_BASE || "").replace(/\/+$/, "");
   const MODE = API ? "api" : "local";
-  const MODE_LABEL = MODE === "api" ? `Vercel API 연동 (${API.replace(/^https?:\/\//, "")})` : "로컬 미리보기 모드";
+  const MODE_LABEL = MODE === "api" ? "" : "로컬 미리보기 모드";
 
   async function api(path, options = {}) {
     const res = await fetch(API + path, {
@@ -614,6 +620,7 @@
     const el = $("apiModeLabel");
     el.textContent = text;
     el.className = "api-mode" + (kind ? " " + kind : "");
+    el.style.display = text ? "" : "none";   // 서버 연결 정상(Vercel API)일 때는 표시하지 않음
   }
   function showNotice(html, isError) {
     const n = $("notice");

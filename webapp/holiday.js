@@ -730,6 +730,7 @@ async function deleteLeave() {
 function hdRefreshViews() {
   if (state.view === "holiday") renderHolidayView();
   if (state.view === "summary") renderSummary();
+  if (state.view === "dashboard" && typeof renderDashboard === "function") renderDashboard();
 }
 
 // 담당자 설정에서 이름이 바뀌면 휴가 기록의 담당자명도 함께 변경

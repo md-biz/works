@@ -464,7 +464,12 @@ function recomputeHours(task) {
 // ---------------- Bootstrapping ----------------
 
 async function init() {
-  document.getElementById("apiModeLabel").textContent = API_BASE ? `Vercel API 연동 (${API_BASE})` : "로컬 데모 모드 (localStorage) — 아직 Vercel과 연결되지 않았습니다";
+  // 서버 연결 정상 시에는 표시하지 않고, 서버 주소가 없을 때(로컬 데모)만 안내
+  const modeEl = document.getElementById("apiModeLabel");
+  if (modeEl) {
+    modeEl.textContent = API_BASE ? "" : "로컬 데모 모드 (localStorage) — 아직 Vercel과 연결되지 않았습니다";
+    modeEl.style.display = API_BASE ? "none" : "";
+  }
   // 월 목록 · 담당자 · 분류는 서로 기다릴 필요가 없어 동시에 요청합니다. (차례로 요청하면 서버 왕복 시간이 그만큼 쌓임)
   const [months, savedAssignees, savedCategories] = await Promise.all([loadMonths(), loadAssignees(), loadCategories()]);
   state.months = months;
@@ -486,6 +491,7 @@ async function init() {
     loadHolidayData().then(() => {
       if (state.view === "holiday" && typeof renderHolidayView === "function") renderHolidayView();
       if (state.view === "summary") renderSummary();
+      if (state.view === "dashboard") renderDashboard();   // 휴가 시간이 도착하면 투입 MM 다시 계산
     });
   }
   state.currentMonth = state.months[state.months.length - 1];
@@ -943,6 +949,34 @@ function buildStatusFilter() {
   if (sel.value !== state.statusFilter) { state.statusFilter = ""; sel.value = ""; }
   sel.classList.toggle("is-active", Boolean(state.statusFilter));
   sel.onchange = () => { state.statusFilter = sel.value; renderSheet(); };
+  renderStatusBar();
+}
+
+// ---------------- 업무현황 상단: 전체 · 진행현황별 건수 (클릭하면 해당 업무만) ----------------
+// 건수는 "내 업무만"이 켜져 있으면 내 업무 기준, 꺼져 있으면 전체 기준 (검색어는 반영하지 않음)
+function renderStatusBar() {
+  const bar = document.getElementById("statusChips");
+  if (!bar) return;
+  const myName = state.myOnly ? myAssigneeName() : "";
+  const scope = state.myOnly ? state.tasks.filter(t => isMyTask(t, myName)) : state.tasks;
+  const counts = {};
+  scope.forEach(t => { const k = t.status || "__blank__"; counts[k] = (counts[k] || 0) + 1; });
+  const items = [{ key: "", label: "전체", n: scope.length }]
+    .concat(OPTIONS.진행현황.map(st => ({ key: st, label: st, n: counts[st] || 0 })));
+  if (counts.__blank__) items.push({ key: "__blank__", label: "미지정", n: counts.__blank__ });
+  bar.innerHTML = items.map(it => `
+    <button type="button" class="sb-chip${state.statusFilter === it.key ? " is-active" : ""}" data-key="${it.key}" data-status="${it.key || "all"}"
+      aria-pressed="${state.statusFilter === it.key}" title="${it.key ? `진행현황 '${it.label}'인 업무만 보기` : "전체 업무 보기"}">
+      ${it.key ? `<span class="sb-dot"></span>` : ""}<span class="sb-label">${it.label}</span><b class="sb-num">${it.n}</b>
+    </button>`).join("");
+  bar.querySelectorAll(".sb-chip").forEach(btn => {
+    btn.onclick = () => {
+      const k = btn.dataset.key;
+      // 이미 선택된 상태를 다시 누르면 전체로
+      state.statusFilter = (k && state.statusFilter === k) ? "" : k;
+      renderSheet();
+    };
+  });
 }
 
 // ---------------- 셀 이동 (Enter / Shift+Enter) ----------------
@@ -1063,7 +1097,7 @@ function updateMyOnlyBtn() {
   const name = myAssigneeName();
   btn.classList.toggle("is-active", state.myOnly);
   btn.setAttribute("aria-pressed", state.myOnly ? "true" : "false");
-  btn.textContent = state.myOnly ? "✓ 내 업무만" : "내 업무만";
+  btn.textContent = "내 업무만";   // 켜짐/꺼짐은 스위치 모양(CSS)으로 표시
   btn.title = name
     ? `업무담당자(기획·디자인·퍼블·개발·GA)가 '${name}'인 업무만 봅니다. 다시 누르면 전체 목록`
     : "로그인 이름이 담당자 코드(예: 기획2)와 같아야 내 업무를 찾을 수 있습니다";
@@ -1141,6 +1175,7 @@ function renderSheet() {
   rows.forEach(task => {
     const tr = document.createElement("tr");
     tr.className = rowStatusClass(task.status);
+    tr.dataset.status = task.status || "";   // 진행현황 배지 색상용
     COLUMNS.forEach((col, colIdx) => {
       const td = document.createElement("td");
       markFrozen(td, colIdx);
@@ -1385,11 +1420,11 @@ function sumHoursByRole(tasks) {
   return sums;
 }
 
-function renderMMTable() {
-  const el = document.getElementById("mmTable");
+// 이번 달 직무별 투입 MM — 요약 탭·대시보드·엑셀이 같은 값을 쓰도록 한 곳에서 계산
+// (SI 제외 업무 투입시간 + 휴일관리에 등록된 휴가 시간) ÷ (업무일수 × 8H)
+function computeMonthMM() {
   const tasks = state.tasks.filter(t => t.major !== "SI");
   const hourSums = sumHoursByRole(tasks);
-  // 휴일 관리에 등록된 담당자별 휴가 시간(해당 월)을 투입 MM에 더합니다.
   const leaveHours = typeof leaveHoursByRoleForMonth === "function" ? leaveHoursByRoleForMonth(state.currentMonth) : {};
   const mmByRole = {};
   const leaveMM = {};
@@ -1397,6 +1432,15 @@ function renderMMTable() {
     leaveMM[r] = (leaveHours[r] || 0) / mmHours();
     mmByRole[r] = hourSums[r] / mmHours() + leaveMM[r];
   });
+  const mmTotal = ROLES.reduce((a, r) => a + mmByRole[r], 0);
+  const targetTotal = ROLES.reduce((a, r) => a + num(state.settings.targetMM[r]), 0);
+  return { hourSums, leaveHours, leaveMM, mmByRole, mmTotal, targetTotal };
+}
+
+function renderMMTable() {
+  const el = document.getElementById("mmTable");
+  // 휴일 관리에 등록된 담당자별 휴가 시간(해당 월)을 투입 MM에 더합니다.
+  const { leaveHours, leaveMM, mmByRole } = computeMonthMM();
   const leaveMMTotal = ROLES.reduce((a, r) => a + leaveMM[r], 0);
   const target = state.settings.targetMM;
 
@@ -1520,11 +1564,8 @@ function renderDashboard() {
   const cancelled = tasks.filter(t => t.status === "취소").length;
   const overdue = tasks.filter(t => t.dueDate && t.dueDate < today && !["완료", "취소"].includes(t.status)).length;
 
-  const mmTasks = tasks.filter(t => t.major !== "SI");
-  const hourSums = sumHoursByRole(mmTasks);
-  const mmByRole = {}; ROLES.forEach(r => { mmByRole[r] = hourSums[r] / mmHours(); });
-  const mmTotal = ROLES.reduce((a, r) => a + mmByRole[r], 0);
-  const targetTotal = ROLES.reduce((a, r) => a + num(state.settings.targetMM[r]), 0);
+  // 요약 탭과 같은 기준(휴가 시간 포함)으로 계산 — 예전에는 휴가가 빠져 요약 탭과 값이 달랐음
+  const { mmByRole, mmTotal, targetTotal } = computeMonthMM();
   const utilRate = targetTotal ? (mmTotal / targetTotal * 100) : 0;
 
   document.getElementById("dashTitle").textContent = `대시보드 · 업무현황_${state.currentMonth}`;
@@ -1617,6 +1658,45 @@ function renderDashboard() {
         ${t.priority ? pillHtml(t.priority, priorityTone(t.priority)) : ""}
         ${pillHtml(t.status || "-", statusTone(t.status))}
       </div>`).join("")}</div>` : `<p class="dash-empty">차주로 예정된 업무가 없습니다.</p>`);
+
+  updateDashHero();
+}
+
+// ---------------- 대시보드 배너: 오늘의 업무 N건 ----------------
+// 로그인 사용자가 담당자(기획·디자인·퍼블·개발·GA)로 지정된 업무 중 완료·취소를 뺀 건수
+function myOpenTaskCount() {
+  const name = myAssigneeName();
+  if (!name) return 0;
+  return state.tasks.filter(t =>
+    MY_TASK_KEYS.some(k => String(t[k] || "").trim() === name) && !["완료", "취소"].includes(t.status)
+  ).length;
+}
+
+function updateDashHero() {
+  const hero = document.getElementById("dashHero");
+  const msg = document.getElementById("dashHeroMsg");
+  if (!hero || !msg) return;
+  const cnt = myOpenTaskCount();
+  hero.dataset.count = String(cnt);
+  msg.textContent = cnt > 0 ? `오늘의 업무 - ${cnt}건` : "업무현황을 확인하세요.";
+  hero.title = cnt > 0 ? "클릭하면 내 업무만 모아 봅니다" : "클릭하면 업무현황 목록으로 이동합니다";
+  if (!hero.dataset.bound) {
+    hero.dataset.bound = "1";
+    const go = () => openFromDashHero();
+    hero.addEventListener("click", go);
+    hero.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  }
+}
+
+// 내 업무가 있으면 "내 업무만" 켠 업무현황, 없으면 전체 업무현황으로 이동
+function openFromDashHero() {
+  const cnt = myOpenTaskCount();
+  state.myOnly = cnt > 0;
+  state.myPinned.clear();
+  updateMyOnlyBtn();
+  setView("sheet");
+  renderSheet();
+  window.scrollTo(0, 0);
 }
 
 // ---------- 담당자별 진행 중인 업무 건 수 ----------
