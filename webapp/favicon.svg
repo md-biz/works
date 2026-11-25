@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#7c3aed"/>
-  <rect x="16" y="16" width="8" height="8" rx="2" fill="#fff"/>
-  <rect x="28" y="17" width="20" height="6" rx="3" fill="#fff"/>
-  <rect x="16" y="28" width="8" height="8" rx="2" fill="#fff"/>
-  <rect x="28" y="29" width="20" height="6" rx="3" fill="#fff" opacity=".72"/>
-  <rect x="16" y="40" width="8" height="8" rx="2" fill="#f472b6"/>
-  <rect x="28" y="41" width="14" height="6" rx="3" fill="#fff" opacity=".72"/>
+  <!-- 페이지 타이틀 아이콘과 같은 도형(2×2). 흰 마름모가 보이도록 검정 바탕 위에 배치 -->
+  <rect width="64" height="64" rx="14" fill="#000000"/>
+  <g transform="translate(8 8) scale(1.5)">
+    <rect x="1" y="1" width="14" height="14" rx="4" fill="#8b5cf6"/>
+    <circle cx="24" cy="8" r="7" fill="#c4b5fd"/>
+    <path d="M1 31V17a14 14 0 0 1 14 14z" fill="#d946ef"/>
+    <path d="M24 17l7 7-7 7-7-7z" fill="#ffffff"/>
+  </g>
 </svg>
