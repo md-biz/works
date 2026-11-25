@@ -515,21 +515,27 @@ function renderMonthTabs() {
     btn.onclick = () => switchMonth(m);
     tabWrap.appendChild(btn);
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "month-tab-del";
-    delBtn.textContent = "✕";
-    delBtn.title = "이 월 시트 삭제";
-    delBtn.onclick = (e) => { e.stopPropagation(); deleteMonth(m); };
-    tabWrap.appendChild(delBtn);
+    // 시트 삭제(✕)는 관리자에게만 표시
+    if (isAdminUser()) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "month-tab-del";
+      delBtn.textContent = "✕";
+      delBtn.title = "이 월 시트 삭제";
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteMonth(m); };
+      tabWrap.appendChild(delBtn);
+    }
 
     wrap.appendChild(tabWrap);
   });
 
-  const addBtn = document.createElement("button");
-  addBtn.className = "month-tab add";
-  addBtn.textContent = "+ 새 월 시트";
-  addBtn.onclick = addMonth;
-  wrap.appendChild(addBtn);
+  // 새 월 시트 추가는 관리자에게만 표시
+  if (isAdminUser()) {
+    const addBtn = document.createElement("button");
+    addBtn.className = "month-tab add";
+    addBtn.textContent = "+ 새 월 시트";
+    addBtn.onclick = addMonth;
+    wrap.appendChild(addBtn);
+  }
 
   const spacer = document.createElement("span");
   spacer.className = "month-tabs-spacer";
@@ -550,7 +556,69 @@ function renderMonthTabs() {
   }
 }
 
+// 로그인 사용자가 관리자인지 (WorksAuth 사용자 정보 기준)
+function isAdminUser() {
+  const u = window.WorksAuth && window.WorksAuth.user ? window.WorksAuth.user() : null;
+  return !!(u && u.admin);
+}
+
+// 관리자 비밀번호 확인 팝업 → 서버에서 본인 비밀번호 확인. 일치하면 true, 취소하면 false
+function askAdminPassword(title) {
+  return new Promise(resolve => {
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.style.display = "flex";
+    modal.innerHTML = `
+      <form class="modal-box" autocomplete="off">
+        <h2></h2>
+        <p class="modal-desc">관리자 비밀번호를 입력하세요.</p>
+        <input type="password" class="admin-pw-input" placeholder="비밀번호" />
+        <p class="admin-pw-msg"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-act="cancel">취소</button>
+          <button type="submit" class="btn btn-primary">확인</button>
+        </div>
+      </form>`;
+    modal.querySelector("h2").textContent = title;
+    document.body.appendChild(modal);
+    const form = modal.querySelector("form");
+    const input = modal.querySelector(".admin-pw-input");
+    const msg = modal.querySelector(".admin-pw-msg");
+    const okBtn = modal.querySelector('button[type="submit"]');
+    const close = (result) => { document.removeEventListener("keydown", onKey); modal.remove(); resolve(result); };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+    document.addEventListener("keydown", onKey);
+    modal.querySelector('[data-act="cancel"]').onclick = () => close(false);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const pw = input.value;
+      if (!pw) { msg.textContent = "비밀번호를 입력하세요."; input.focus(); return; }
+      okBtn.disabled = true;
+      msg.textContent = "확인 중…";
+      try {
+        const token = window.WorksAuth && window.WorksAuth.token ? window.WorksAuth.token() : "";
+        const res = await fetch(`${API_BASE}/api/auth?action=verify`, {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ password: pw })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok) { close(true); return; }
+        msg.textContent = json.error || `확인 실패 (${res.status})`;
+      } catch (err) {
+        msg.textContent = `서버에 연결할 수 없습니다. (${err.message})`;
+      }
+      okBtn.disabled = false;
+      input.value = "";
+      input.focus();
+    };
+    setTimeout(() => input.focus(), 0);
+  });
+}
+
 async function addMonth() {
+  if (!isAdminUser()) { alert("관리자만 새 월 시트를 추가할 수 있습니다."); return; }
   const label = prompt("추가할 월을 입력하세요 (예: 10월)");
   if (!label) return;
   const clean = label.trim().endsWith("월") ? label.trim() : `${label.trim()}월`;
@@ -642,7 +710,11 @@ async function saveCarriedTasks(month, tasks) {
 }
 
 async function deleteMonth(month) {
-  const ok = confirm("입력된 정보가 모두 삭제됩니다. 삭제하시겠습니까?");
+  if (!isAdminUser()) { alert("관리자만 월 시트를 삭제할 수 있습니다."); return; }
+  // 1) 관리자 비밀번호 확인 → 2) 삭제 확인창 → 3) 삭제
+  const verified = await askAdminPassword(`업무현황_${month} 시트 삭제`);
+  if (!verified) return;
+  const ok = confirm(`업무현황_${month} 시트를 정말 삭제하시겠습니까?\n입력된 정보가 모두 삭제됩니다.`);
   if (!ok) return; // N: 삭제하지 않고 닫기
 
   // 서버의 최신 월 목록에서 이 월만 뺍니다. (다른 사용자가 그 사이 추가한 월이 사라지지 않도록)

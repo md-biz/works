@@ -6,6 +6,7 @@
 //  POST   /api/auth?action=password  { current, next }           → { token, user }  (본인 비밀번호 변경)
 //
 //  [관리자 전용]
+//  POST   /api/auth?action=verify    { password }                → { ok }  (본인 비밀번호 재확인, 월 시트 삭제 등)
 //  GET    /api/auth?action=users                                 → { users }
 //  POST   /api/auth?action=users     { email, name, admin }      → 신규 등록 (초기 비밀번호 medialog2026!)
 //  PATCH  /api/auth?action=users     { email, name?, active?, admin? }
@@ -105,6 +106,23 @@ module.exports = withApi(async (req, res) => {
   }
 
   // ---------- 관리자 전용 ----------
+  // 중요 작업(월 시트 삭제 등) 전에 관리자 본인 비밀번호를 다시 확인합니다.
+  // 틀리면 로그인 실패 횟수에 함께 더해져, 15분 안에 10회 틀리면 차단됩니다.
+  if (action === "verify") {
+    if (req.method !== "POST") return bad(res, 405, "지원하지 않는 메서드입니다.");
+    if (!me.admin) return bad(res, 403, "관리자만 사용할 수 있습니다.");
+    if ((await A.failCount(me.email)) >= A.FAIL_LIMIT) {
+      return bad(res, 429, "비밀번호를 여러 번 틀려 잠시 차단되었습니다. 15분 후 다시 시도하세요.");
+    }
+    const { password } = body(req);
+    if (!password || !A.verifyPassword(password, me)) {
+      await A.addFail(me.email);
+      return bad(res, 400, "비밀번호가 맞지 않습니다.");
+    }
+    await A.clearFail(me.email);
+    return res.status(200).json({ ok: true });
+  }
+
   if (action === "users" || action === "reset") {
     if (!me.admin) return bad(res, 403, "관리자만 사용할 수 있습니다.");
     const users = await A.getUsers();
