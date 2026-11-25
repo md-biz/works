@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" />
-<link rel="stylesheet" href="styles.css?v=20261125z" />
+<link rel="stylesheet" href="styles.css?v=20261125aa" />
 <style>
   /* ---------- 상단 메뉴 (업무관리 / 배포 관리 공통) ---------- */
   .global-nav {
@@ -96,16 +96,37 @@
       <h2 class="dash-greet"><span id="dashUserName">사용자</span>님 안녕하세요.</h2>
     </div>
     <div id="dashHero" class="dash-hero" role="button" tabindex="0" data-count="0">
-      <!-- 배너 사진: 눈 내리는 파란 하늘과 나무 (Unsplash 사진, 사용자 제공). 불러오지 못하면 기본 그림(dash-hero.svg)으로 대체 -->
-      <img src="dash-hero.jpg?v=20261125z"
-           alt="" aria-hidden="true" loading="eager" decoding="async"
-           onerror="this.onerror=null;this.src='dash-hero.svg?v=20261125w';var c=this.parentNode.querySelector('.dash-hero-credit');if(c)c.hidden=true;" />
+      <!-- 배너 사진: hero/ 폴더의 사진 중 하나를 접속할 때마다 무작위로 표시. 불러오지 못하면 기본 그림(dash-hero.svg) -->
+      <img id="dashHeroImg" alt="" aria-hidden="true" decoding="async"
+           onerror="this.onerror=null;this.src='dash-hero.svg?v=20261125w';this.style.objectPosition='right bottom';var c=document.getElementById('dashHeroCredit');if(c)c.hidden=true;" />
+      <script>
+      (function () {
+        // pos: 배너(가로로 긴 띠)에 보일 위치 — 세로 기준 %
+        var PHOTOS = [
+          { src: "hero/hero-1.jpg", pos: "center 38%", credit: "" },                          // 눈 내리는 공원·시계
+          { src: "hero/hero-2.jpg", pos: "center 60%", credit: "" },                          // 서리 내린 나무와 설원
+          { src: "hero/hero-3.jpg", pos: "center 30%", credit: "Photo · Unsplash" },          // 눈 내리는 파란 하늘
+          { src: "hero/hero-4.jpg", pos: "center 40%", credit: "Photo · John Price / Unsplash" } // 눈 덮인 열매
+        ];
+        var p = PHOTOS[Math.floor(Math.random() * PHOTOS.length)];
+        var img = document.getElementById("dashHeroImg");
+        img.style.objectPosition = p.pos;
+        img.src = p.src + "?v=20261125aa";
+        img.dataset.credit = p.credit;
+      })();
+      </script>
       <div class="dash-hero-text">
         <span class="dash-hero-tag">● 내 담당 업무</span>
         <p id="dashHeroMsg">업무현황을 확인하세요.</p>
         <span class="dash-hero-link">바로가기 →</span>
       </div>
-      <span class="dash-hero-credit">Photo · Unsplash</span>
+      <span id="dashHeroCredit" class="dash-hero-credit"></span>
+      <script>
+      (function () {
+        var c = document.getElementById("dashHeroCredit"), img = document.getElementById("dashHeroImg");
+        if (c && img) { c.textContent = img.dataset.credit || ""; c.hidden = !img.dataset.credit; }
+      })();
+      </script>
     </div>
     <div class="dash-header">
       <h2 id="dashTitle">대시보드</h2>
