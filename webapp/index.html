@@ -591,5 +591,33 @@
   schedule();
 })();
 </script>
+<script>
+/* ---------- 업무현황 목록 높이: 브라우저 높이에 맞춤 ----------
+   표 영역이 화면 아래 끝(하단 여백 48px, 모바일은 하단 탭 바 96px)까지 차도록 최대 높이를 계산합니다.
+   창 크기 변경·업무현황 탭 이동·목록 다시 그리기 때마다 다시 계산합니다. */
+(function () {
+  var panel = document.getElementById("sheetPanel");
+  if (!panel) return;
+  var box = panel.querySelector(".table-scroll");
+  if (!box) return;
+  var MIN_H = 320;
+  function fit() {
+    if (panel.style.display === "none" || !box.offsetParent) return;
+    var top = box.getBoundingClientRect().top + window.scrollY;
+    var bottomGap = window.matchMedia("(max-width: 720px)").matches ? 96 : 48;
+    var h = Math.max(MIN_H, Math.floor(window.innerHeight - top - bottomGap));
+    box.style.maxHeight = h + "px";
+  }
+  var raf = 0;
+  function schedule() { cancelAnimationFrame(raf); raf = requestAnimationFrame(fit); }
+  window.addEventListener("resize", schedule);
+  var btn = document.getElementById("btnSheetView");
+  if (btn) btn.addEventListener("click", function () { setTimeout(fit, 0); });
+  new MutationObserver(schedule).observe(panel, { attributes: true, attributeFilter: ["style"] });
+  var tb = document.getElementById("tbody");
+  if (tb) new MutationObserver(schedule).observe(tb, { childList: true });
+  schedule();
+})();
+</script>
 </body>
 </html>
