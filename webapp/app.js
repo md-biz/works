@@ -448,11 +448,17 @@ function mmddToIso(text, year) {
   return `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
 }
 
+// 1MM 시간 = 기준 설정의 업무일수 × 8H (업무일수 미입력 시 20일 = 160H)
+function mmHours() {
+  const wd = parseInt(state.settings && state.settings.workDays, 10);
+  return (wd > 0 ? wd : 20) * 8;
+}
+
 function recomputeHours(task) {
   const total = num(task.hPlanner) + num(task.hDesigner) + num(task.hPublisher) + num(task.hGa) + num(task.hPm);
   task.hTotal = total;
   // SI 분류는 MM 계산에서 제외
-  task.mm = task.major === "SI" ? 0 : +(total / MM_HOURS).toFixed(6);
+  task.mm = task.major === "SI" ? 0 : +(total / mmHours()).toFixed(6);
 }
 
 // ---------------- Bootstrapping ----------------
@@ -1385,8 +1391,8 @@ function renderMMTable() {
   const mmByRole = {};
   const leaveMM = {};
   ROLES.forEach(r => {
-    leaveMM[r] = (leaveHours[r] || 0) / MM_HOURS;
-    mmByRole[r] = hourSums[r] / MM_HOURS + leaveMM[r];
+    leaveMM[r] = (leaveHours[r] || 0) / mmHours();
+    mmByRole[r] = hourSums[r] / mmHours() + leaveMM[r];
   });
   const leaveMMTotal = ROLES.reduce((a, r) => a + leaveMM[r], 0);
   const target = state.settings.targetMM;
@@ -1413,7 +1419,7 @@ function renderDetailMMTable() {
     g.minors.forEach((minor, idx) => {
       const tasks = state.tasks.filter(t => t.major === g.major && t.minor === minor);
       const sums = sumHoursByRole(tasks);
-      const mm = {}; ROLES.forEach(r => { mm[r] = sums[r] / MM_HOURS; subtotal[r] += mm[r]; });
+      const mm = {}; ROLES.forEach(r => { mm[r] = sums[r] / mmHours(); subtotal[r] += mm[r]; });
       const rowTotal = ROLES.reduce((a, r) => a + mm[r], 0);
       html += `<tr>${idx === 0 ? `<td class="cell-label" rowspan="${g.minors.length + 1}">${g.major}</td>` : ""}<td class="cell-label">${minor}</td>${ROLES.map(r => `<td>${mm[r] ? fmtMM(mm[r]) : ""}</td>`).join("")}<td>${rowTotal ? fmtMM(rowTotal) : ""}</td></tr>`;
     });
@@ -1513,7 +1519,7 @@ function renderDashboard() {
 
   const mmTasks = tasks.filter(t => t.major !== "SI");
   const hourSums = sumHoursByRole(mmTasks);
-  const mmByRole = {}; ROLES.forEach(r => { mmByRole[r] = hourSums[r] / MM_HOURS; });
+  const mmByRole = {}; ROLES.forEach(r => { mmByRole[r] = hourSums[r] / mmHours(); });
   const mmTotal = ROLES.reduce((a, r) => a + mmByRole[r], 0);
   const targetTotal = ROLES.reduce((a, r) => a + num(state.settings.targetMM[r]), 0);
   const utilRate = targetTotal ? (mmTotal / targetTotal * 100) : 0;
@@ -1706,6 +1712,13 @@ function openSettings() {
   document.getElementById("btnSettingsSave").onclick = async () => {
     await saveSettings(state.currentMonth, state.settings);
     modal.style.display = "none";
+    // 업무일수가 바뀌면 업무별 MM(업무일수 × 8H 기준)도 다시 계산해 저장
+    const before = state.tasks.map(t => t.mm);
+    state.tasks.forEach(recomputeHours);
+    if (state.tasks.some((t, i) => t.mm !== before[i])) {
+      await persistTasks(state.currentMonth, state.tasks);
+      renderSheet();
+    }
     renderSummary();
     renderDashboard();
   };
@@ -2169,7 +2182,7 @@ function buildTaskWorkbookDef(tasks, opts) {
           break;
         }
         case "total": put(addr, null, st(Object.assign(base, { align: { h: "right", v: "center" }, numFmt: "0.0_ ;[Red]\\-0.0\\ " })), { f: `SUM(S${r}:W${r})` }); break;
-        case "mm": put(addr, null, st(Object.assign(base, { align: { h: "right", v: "center" }, numFmt: "0.00_ ;[Red]\\-0.00\\ " })), { f: `IF($D${r}="SI",0,X${r}/${MM_HOURS})` }); break;
+        case "mm": put(addr, null, st(Object.assign(base, { align: { h: "right", v: "center" }, numFmt: "0.00_ ;[Red]\\-0.00\\ " })), { f: `IF($D${r}="SI",0,X${r}/($P$3*8))` }); break;
         case "wrap":
           put(addr, v ?? "", st({ border: col === "H" ? { l: thin, r: thin, t: thin, b: ["thin", "FFB7B7B7"] } : box, align: { h: "left", v: "center", wrap: true } }));
           lines = Math.max(lines, xlEstimateLines(v, width));
@@ -2213,7 +2226,7 @@ function buildTaskWorkbookDef(tasks, opts) {
     setF(`${col}${H_ROW}`, `SUM(${rng(col)})`, foot({ numFmt: "0.0" }));
     if (col !== "X") {
       // M/M = (직무별 투입 H[SI 제외] + 공통업무 H) ÷ MM 기준시간
-      setF(`${col}${MM_ROW}`, `(SUMIFS(${rng(col)},${rng("D")},"<>SI")+${col}${LEAVE_ROW})/${MM_HOURS}`, red("0.00_ ", box));
+      setF(`${col}${MM_ROW}`, `(SUMIFS(${rng(col)},${rng("D")},"<>SI")+${col}${LEAVE_ROW})/($P$3*8)`, red("0.00_ ", box));
       setF(`${col}${RATE_ROW}`, `IFERROR(${col}${MM_ROW}/${col}2,0)`,
         foot({ numFmt: "0.00%", border: { l: thin, r: thin, t: thin, b: ["medium", "FF000000"] } }));
     }
@@ -2292,7 +2305,7 @@ function buildSummarySheetDef(o) {
 
   // 제목
   put(2, 2, `${title} 요약`, st({ font: { name: FONT, sz: 16, b: true }, align: { v: "center" } }));
-  put(3, 2, `ㄴ "${sheetName}" 시트 기준 자동 계산 (MM = 투입시간 ÷ ${MM_HOURS}H)`,
+  put(3, 2, `ㄴ "${sheetName}" 시트 기준 자동 계산 (MM = 투입시간 ÷ (업무일 × 8H))`,
     st({ font: { name: FONT, sz: 10, b: true }, fill: "FFEFEFEF", align: { v: "center" } }));
   for (let c = 3; c <= 14; c++) put(3, c, null, st({ fill: "FFEFEFEF" }));
   merges.push("B3:N3");
@@ -2360,7 +2373,7 @@ function buildSummarySheetDef(o) {
       put(r, 2, g.major, labelC);
       put(r, 3, minor, label);
       ROLE_COLS.forEach((L, i) => put(r, 4 + i, null, numCell(MM2Z),
-        { f: `SUMIFS(${rngOf(L)},${rngOf("D")},$B$${gFirst},${rngOf("E")},$C${r})/${MM_HOURS}` }));
+        { f: `SUMIFS(${rngOf(L)},${rngOf("D")},$B$${gFirst},${rngOf("E")},$C${r})/(${SH}$P$3*8)` }));
       // 계 열: 연한 하늘색
       put(r, TOT, null, st({ border: box, fill: "FFEEF5FB", align: { h: "center", v: "center" }, numFmt: MM2Z }), { f: sumRow(r) });
       rowHeights[r] = 18; r++;
