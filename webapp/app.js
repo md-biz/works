@@ -636,7 +636,7 @@ async function addMonth() {
   }
   state.months = latest;
 
-  // 이전 월 시트에서 진행현황이 "접수/진행/예정"인 업무를 원래 순서대로 가져옵니다.
+  // 이전 월 시트에서 진행현황이 "접수/진행"인 업무를 원래 순서대로 가져옵니다.
   const carried = await carryOverTasks(clean);
 
   state.months.push(clean);
@@ -646,7 +646,7 @@ async function addMonth() {
   renderMonthTabs();
   await switchMonth(clean);
   if (carried.source) {
-    alert(`'${carried.source}' 시트에서 진행현황이 접수·진행·예정인 업무 ${carried.tasks.length}건을 가져왔습니다.`);
+    alert(`'${carried.source}' 시트에서 진행현황이 접수·진행인 업무 ${carried.tasks.length}건을 가져왔습니다.`);
   }
 }
 
@@ -662,7 +662,7 @@ async function latestMonths() {
 }
 
 // 새 월 시트로 넘길 진행현황
-const CARRY_OVER_STATUSES = ["접수", "진행", "예정"];
+const CARRY_OVER_STATUSES = ["접수", "진행"];
 
 // 가져올 원본 월: 새 월 바로 이전 달(숫자 기준) 중 가장 가까운 시트, 없으면 마지막 탭
 function carryOverSourceMonth(newMonth) {
@@ -988,7 +988,7 @@ function cellKeydown(e) {
 function rowStatusClass(status) {
   if (status === "진행") return "row-progress";                // 하늘색
   if (status === "완료") return "row-done";                    // 회색
-  if (["보류", "취소"].includes(status)) return "row-closed";  // 회색
+  if (status === "취소") return "row-closed";                  // 회색
   return "";
 }
 
@@ -1479,8 +1479,7 @@ function pillHtml(text, tone) {
 function statusTone(status) {
   if (status === "완료") return "done";
   if (status === "취소") return "muted";
-  if (status === "진행" || status === "개발" || status === "검수") return "active";
-  if (status === "보류") return "muted";
+  if (status === "진행") return "active";
   return "wait";
 }
 
@@ -1620,8 +1619,8 @@ function renderAssigneeWorkload(tasks) {
   const el = document.getElementById("dashAssigneeCard");
   if (!el) return;
 
-  // "진행 중"으로 볼 상태 (완료·취소·보류 제외)
-  const ONGOING = ["진행", "개발", "검수", "대기", "검토", "접수", "예정"];
+  // "진행 중"으로 볼 상태 (완료·취소 제외)
+  const ONGOING = ["진행", "대기", "접수"];
   const ongoing = tasks.filter(t => ONGOING.includes(t.status));
 
   const roles = Object.keys(ASSIGNEE_ROLE_KEYS).filter(r => (ASSIGNEE_OPTIONS[r] || []).length);
@@ -1634,7 +1633,7 @@ function renderAssigneeWorkload(tasks) {
         role, name,
         total: mine.length,
         active: mine.filter(t => t.status === "진행").length,
-        waiting: mine.filter(t => ["대기", "검토", "접수", "예정"].includes(t.status)).length
+        waiting: mine.filter(t => ["대기", "접수"].includes(t.status)).length
       });
     });
   });
@@ -1653,7 +1652,7 @@ function renderAssigneeWorkload(tasks) {
 
   let html = `<h3>담당자별 진행 중인 업무</h3>
     <table class="summary-table assignee-load">
-      <thead><tr><th>구분</th><th>담당자</th><th>진행</th><th>대기·예정</th><th>합계</th></tr></thead>
+      <thead><tr><th>구분</th><th>담당자</th><th>진행</th><th>대기·접수</th><th>합계</th></tr></thead>
       <tbody>`;
   roles.forEach(role => {
     const group = rows.filter(r => r.role === role);
@@ -2128,7 +2127,7 @@ function buildTaskWorkbookDef(tasks, opts) {
 
   const q = rng("Q");
   put("B3", null, st({ font: { name: FONT, sz: 10, b: true }, fill: "FFEFEFEF", align: { v: "center" } }), {
-    f: `"ㄴ 총 "&COUNTA(${q})&"건 - 접수 "&COUNTIF(${q},"접수")&"건, 검토 "&COUNTIF(${q},"검토")&"건, 진행 "&COUNTIF(${q},"진행")&"건, 완료 "&COUNTIF(${q},"완료")&"건 / 예정 "&COUNTIF(${q},"예정")&"건, 대기 "&COUNTIF(${q},"대기")&"건, 보류 "&COUNTIF(${q},"보류")&"건, 취소 "&COUNTIF(${q},"취소")&"건"`
+    f: `"ㄴ 총 "&COUNTA(${q})&"건 - 접수 "&COUNTIF(${q},"접수")&"건, 진행 "&COUNTIF(${q},"진행")&"건, 완료 "&COUNTIF(${q},"완료")&"건 / 대기 "&COUNTIF(${q},"대기")&"건, 취소 "&COUNTIF(${q},"취소")&"건"`
   });
   const gray = st({ fill: "FFEFEFEF", align: { h: "center", v: "center" } });
   put("M3", null, Object.assign({}, gray, { numFmt: 'm"/"d' }), { date: `${year}-${pad(month)}-01` });
@@ -2237,8 +2236,7 @@ function buildTaskWorkbookDef(tasks, opts) {
     ] },
     { sqref: `B${FIRST}:Z${LAST}`, rules: [
       { type: "expression", formula: `$Q${FIRST}="완료"`, dxf: { fill: "FFD9D9D9", color: "FF000000" } },
-      { type: "expression", formula: `$Q${FIRST}="취소"`, dxf: { fill: "FFD9D9D9", color: "FF000000" } },
-      { type: "expression", formula: `$Q${FIRST}="보류"`, dxf: { fill: "FFD9D9D9" } }
+      { type: "expression", formula: `$Q${FIRST}="취소"`, dxf: { fill: "FFD9D9D9", color: "FF000000" } }
     ] },
     { sqref: `H${FIRST}:I${LAST} Z${FIRST}:Z${LAST}`, rules: [
       { type: "expression", formula: `$Q${FIRST}="진행"`, dxf: { fill: "FFEAF2FF" } }
@@ -2708,7 +2706,7 @@ async function generateWeeklyReport() {
 
     // 접수(검토 중)
     const receivedList = rest
-      .filter(t => ["접수", "검토"].includes(t.status))
+      .filter(t => t.status === "접수")
       .sort((a, b) => (a.receivedDate || "").localeCompare(b.receivedDate || ""));
 
     // 완료일을 특정할 수 없는 완료 건
