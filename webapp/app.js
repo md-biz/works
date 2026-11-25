@@ -2245,6 +2245,8 @@ function buildTaskWorkbookDef(tasks, opts) {
     ] }
   ];
 
+  const summarySheet = buildSummarySheetDef({ year, month, title, sheetName, FIRST, LAST, LEAVE_ROW, MM_ROW });
+
   return {
     sheets: [{
       name: sheetName,
@@ -2254,7 +2256,136 @@ function buildTaskWorkbookDef(tasks, opts) {
       autoFilter: `B6:Z${LAST}`,
       landscapeFit: true,
       cf
-    }]
+    }, summarySheet]
+  };
+}
+
+// 엑셀 "요약" 시트 — 화면의 요약 탭과 같은 표 3개를 업무현황 시트를 참조하는 수식으로 만듭니다.
+// (엑셀에서 업무현황 시트 값을 고치면 요약도 함께 바뀜)
+function buildSummarySheetDef(o) {
+  const { year, month, title, sheetName, FIRST, LAST, LEAVE_ROW, MM_ROW } = o;
+  const FONT = "맑은 고딕";
+  const GRID = "FF999999";
+  const thin = ["thin", GRID];
+  const box = { l: thin, r: thin, t: thin, b: thin };
+  const st = (x) => Object.assign({ font: { name: FONT, sz: 9 } }, x);
+  const cells = [];
+  const merges = [];
+  const rowHeights = { 1: 9, 2: 23.25, 3: 19.5, 4: 9 };
+  const col = (n) => XlsxLite.colName(n);
+  const put = (r, c, v, s, extra) => cells.push(Object.assign({ r, c, v, s }, extra || {}));
+
+  const SH = `'${String(sheetName).replace(/'/g, "''")}'!`;
+  const rngOf = (L) => `${SH}$${L}$${FIRST}:$${L}$${LAST}`;
+  const ROLE_COLS = ["S", "T", "U", "V", "W"]; // 업무현황 시트의 직무별 투입시간 열 (기획·디자인·퍼블·GA·PM)
+  const ROLES_XL = XL_ROLE_KEYS;
+
+  // 스타일 (업무현황 시트와 같은 색·선)
+  const head = st({ font: { name: FONT, sz: 9, color: "FFFFFFFF" }, fill: "FF000000", align: { h: "center", v: "center", wrap: true }, border: box });
+  const label = st({ border: box, align: { h: "left", v: "center" } });
+  const labelC = st({ border: box, align: { h: "center", v: "center" } });
+  const numCell = (fmt) => st({ border: box, align: { h: "center", v: "center" }, numFmt: fmt });
+  const foot = (x) => st(Object.assign({ fill: "FFDDEBF7", border: box, align: { h: "center", v: "center" } }, x));
+  const footLabel = foot({ font: { name: FONT, sz: 9, b: true }, align: { h: "left", v: "center" } });
+  const sectionTitle = st({ font: { name: FONT, sz: 11, b: true }, align: { v: "center" } });
+  const CNT = '0;-0;"";@';          // 0은 빈칸으로 (화면 요약과 동일)
+  const MM2 = '0.00;-0.00;"";@';
+  const MM2Z = "0.00";
+  const PCT = "0.0%";
+
+  // 제목
+  put(2, 2, `${title} 요약`, st({ font: { name: FONT, sz: 16, b: true }, align: { v: "center" } }));
+  put(3, 2, `ㄴ "${sheetName}" 시트 기준 자동 계산 (MM = 투입시간 ÷ ${MM_HOURS}H)`,
+    st({ font: { name: FONT, sz: 10, b: true }, fill: "FFEFEFEF", align: { v: "center" } }));
+  for (let c = 3; c <= 14; c++) put(3, c, null, st({ fill: "FFEFEFEF" }));
+  merges.push("B3:N3");
+
+  let r = 5;
+  // 표 머리글 한 줄 (B:C는 합쳐서 "구분")
+  const headerRow = (labels, mergeBC) => {
+    labels.forEach((t, i) => put(r, 2 + i, t, head));
+    if (mergeBC) merges.push(`B${r}:C${r}`);
+    rowHeights[r] = 22;
+    r++;
+  };
+
+  // ---- 1. 업무별 투입 MM (기준 / 투입 / 휴가 / 투입률) ----
+  put(r, 2, `■ ${month}월 업무별 투입 MM`, sectionTitle); rowHeights[r] = 21; r++;
+  headerRow(["구분", null, ...ROLES_XL, "계"], true);
+  const TOT = 4 + ROLES_XL.length; // 계 열 번호
+  const mmRows = {};
+  const mmLine = (key, text, cellF, style, totalF, labelStyle) => {
+    mmRows[key] = r;
+    put(r, 2, text, labelStyle || label); put(r, 3, null, labelStyle || label); merges.push(`B${r}:C${r}`);
+    ROLE_COLS.forEach((L, i) => put(r, 4 + i, null, style, { f: cellF(L, 4 + i) }));
+    put(r, TOT, null, style, { f: totalF(r) });
+    rowHeights[r] = 18; r++;
+  };
+  const sumRow = (rr) => `SUM(D${rr}:${col(TOT - 1)}${rr})`;
+  mmLine("target", "기준 MM", (L) => `${SH}${L}2`, numCell(MM2Z), sumRow);
+  mmLine("mm", "투입 MM", (L) => `${SH}${L}${MM_ROW}`,
+    st({ border: box, align: { h: "center", v: "center" }, numFmt: MM2Z, font: { name: FONT, sz: 9, b: true } }), sumRow);
+  mmLine("leave", "ㄴ 휴가", (L) => `${SH}${L}${LEAVE_ROW}/${MM_HOURS}`,
+    st({ border: box, align: { h: "center", v: "center" }, numFmt: '0.00;-0.00;"-";@' }), sumRow);
+  mmLine("rate", "투입률", (L, c) => `IFERROR(${col(c)}${mmRows.mm}/${col(c)}${mmRows.target},0)`,
+    foot({ font: { name: FONT, sz: 9, b: true }, numFmt: PCT }),
+    () => `IFERROR(${col(TOT)}${mmRows.mm}/${col(TOT)}${mmRows.target},0)`, footLabel);
+  r += 2;
+
+  // ---- 2. 업무 건 수 (대분류 × 진행현황) ----
+  const statuses = OPTIONS.진행현황;
+  const majors = [...MAJOR_CATEGORIES];
+  put(r, 2, "■ 업무 건 수", sectionTitle); rowHeights[r] = 21; r++;
+  headerRow(["구분", null, "계", ...statuses], true);
+  const cntFirst = r;
+  majors.forEach(major => {
+    put(r, 2, major, label); put(r, 3, null, label); merges.push(`B${r}:C${r}`);
+    put(r, 4, null, numCell(CNT), { f: `COUNTIF(${rngOf("D")},$B${r})` });
+    statuses.forEach((stt, i) => {
+      put(r, 5 + i, null, numCell(CNT), { f: `COUNTIFS(${rngOf("D")},$B${r},${rngOf("Q")},"${stt}")` });
+    });
+    rowHeights[r] = 18; r++;
+  });
+  const cntLast = r - 1;
+  put(r, 2, "계", footLabel); put(r, 3, null, footLabel); merges.push(`B${r}:C${r}`);
+  for (let c = 4; c <= 4 + statuses.length; c++) {
+    put(r, c, null, foot({ font: { name: FONT, sz: 9, b: true }, numFmt: CNT }), { f: `SUM(${col(c)}${cntFirst}:${col(c)}${cntLast})` });
+  }
+  rowHeights[r] = 18; r += 2;
+
+  // ---- 3. 업무별 투입 MM (대분류 · 중분류) ----
+  put(r, 2, "■ 업무별 투입 MM", sectionTitle); rowHeights[r] = 21; r++;
+  headerRow(["대분류", "중분류", ...ROLES_XL, "계"], false);
+  const groups = MAJOR_CATEGORIES
+    .map(major => ({ major, minors: MINOR_CATEGORY_MAP[major] || [] }))
+    .filter(g => g.minors.length);
+  groups.forEach(g => {
+    const gFirst = r;
+    g.minors.forEach(minor => {
+      put(r, 2, g.major, labelC);
+      put(r, 3, minor, label);
+      ROLE_COLS.forEach((L, i) => put(r, 4 + i, null, numCell(MM2),
+        { f: `SUMIFS(${rngOf(L)},${rngOf("D")},$B$${gFirst},${rngOf("E")},$C${r})/${MM_HOURS}` }));
+      put(r, TOT, null, numCell(MM2), { f: sumRow(r) });
+      rowHeights[r] = 18; r++;
+    });
+    // 소계
+    put(r, 2, null, labelC);
+    put(r, 3, "소계", footLabel);
+    for (let c = 4; c <= TOT; c++) {
+      put(r, c, null, foot({ font: { name: FONT, sz: 9, b: true }, numFmt: MM2Z }), { f: `SUM(${col(c)}${gFirst}:${col(c)}${r - 1})` });
+    }
+    rowHeights[r] = 18;
+    merges.push(`B${gFirst}:B${r}`);
+    r++;
+  });
+
+  return {
+    name: "요약",
+    cols: [{ c: 1, width: 2.43 }, { c: 2, width: 10 }, { c: 3, width: 16 }]
+      .concat(Array.from({ length: 11 }, (_, i) => ({ c: 4 + i, width: 8.5 }))),
+    rowHeights, cells, merges,
+    landscapeFit: true
   };
 }
 
